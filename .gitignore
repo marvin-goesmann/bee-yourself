@@ -1,0 +1,6 @@
+.build/
+*.app
+.superpowers/
+.DS_Store
+docs/
+recording/
