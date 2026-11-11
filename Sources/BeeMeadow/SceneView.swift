@@ -38,7 +38,7 @@ final class SceneView: NSView {
     private var hiddenTimer: Timer?
     private var lastTimestamp: CFTimeInterval?
     private let startTime = CACurrentMediaTime()
-    private var mouse: (x: Double, y: Double)?
+    var mouse: (x: Double, y: Double)?
     private enum Placing: Equatable { case emptyBox, hive(Int) }
     private var placing: Placing?
     private var drag: Drag?
@@ -50,9 +50,9 @@ final class SceneView: NSView {
     private var canSleep: Bool { sleep == nil && Clock.canSleep(Clock.minute(at: Date())) }
     private static let maxShedRows = 5
 
-    private enum ShedAction { case emptyBox, hive(Int), stall, close }
+    enum ShedAction { case emptyBox, hive(Int), stall, close }
 
-    private func shedLayout() -> (panel: PixelRect, rows: [(rect: PixelRect, label: String, enabled: Bool, action: ShedAction)]) {
+    func shedLayout() -> (panel: PixelRect, rows: [(rect: PixelRect, label: String, enabled: Bool, action: ShedAction)]) {
         let room = world.hasRoom(in: currentGarden)
         var items: [(String, ShedAction)] = []
         if world.spareBoxes > 0 { items.append((world.spareBoxes == 1 ? "Hive box" : "Hive box x\(world.spareBoxes)", .emptyBox)) }
@@ -105,13 +105,17 @@ final class SceneView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard sleep == nil else { return }
-        let p = pixelPoint(event)
+        if !click(pixelPoint(event)) { window?.performDrag(with: event) }
+    }
+
+    @discardableResult
+    func click(_ p: (x: Double, y: Double)) -> Bool {
         switch scene {
         case .garden:
             if shedOpen {
                 let layout = shedLayout()
-                guard Widgets.contains(layout.panel, p) else { shedOpen = false; return }
-                guard let row = layout.rows.first(where: { Widgets.contains($0.rect, p) }), row.enabled else { return }
+                guard Widgets.contains(layout.panel, p) else { shedOpen = false; return true }
+                guard let row = layout.rows.first(where: { Widgets.contains($0.rect, p) }), row.enabled else { return true }
                 shedOpen = false
                 switch row.action {
                 case .emptyBox: placing = .emptyBox
@@ -119,23 +123,23 @@ final class SceneView: NSView {
                 case .stall: stallReturnsToGarden = true; go(to: .stall)
                 case .close: break
                 }
-                return
+                return true
             }
-            if placing != nil { place(at: p); return }
-            if Widgets.contains(Widgets.mapRect, p) { go(to: .valley); return }
-            if Widgets.contains(Widgets.pantryRect, p) { go(to: .pantry); return }
-            if Widgets.contains(Widgets.shedRect, p) { shedOpen = true; return }
-            if canSleep && Widgets.contains(Widgets.bedRect, p) { sleep = (0, false); return }
+            if placing != nil { place(at: p); return true }
+            if Widgets.contains(Widgets.mapRect, p) { go(to: .valley); return true }
+            if Widgets.contains(Widgets.pantryRect, p) { go(to: .pantry); return true }
+            if Widgets.contains(Widgets.shedRect, p) { shedOpen = true; return true }
+            if canSleep && Widgets.contains(Widgets.bedRect, p) { sleep = (0, false); return true }
             if let hive = hiveAt(p) {
                 drag = Drag(hive: hive.id, start: p, offset: (p.x - Double(hive.x), p.y - Double(hive.y)), at: (hive.x, hive.y))
-                return
+                return true
             }
         case .hive(let id):
-            if Widgets.contains(Widgets.backRect, p) { go(to: .garden); return }
+            if Widgets.contains(Widgets.backRect, p) { go(to: .garden); return true }
             if Widgets.contains(HiveRenderer.collectRect, p), let jar = world.collect(hive: id, at: Date()) {
                 hiveView.showCollected(jar.honey)
                 onChange?()
-                return
+                return true
             }
             if Widgets.contains(HiveRenderer.splitRect, p), let source = world.hive(id), world.readyToSplit(source), let target = world.split(hive: id) {
                 currentGarden = source.garden
@@ -144,41 +148,41 @@ final class SceneView: NSView {
                     show(["Moving to \(target.name)", "in the \(destination.kind.title.lowercased())"])
                 }
                 onChange?()
-                return
+                return true
             }
         case .pantry:
-            if Widgets.contains(Widgets.backRect, p) { go(to: .garden); return }
-            if Widgets.contains(PantryRenderer.bookRect, p) { go(to: .book); return }
+            if Widgets.contains(Widgets.backRect, p) { go(to: .garden); return true }
+            if Widgets.contains(PantryRenderer.bookRect, p) { go(to: .book); return true }
         case .book:
-            if Widgets.contains(Widgets.backRect, p) { go(to: .pantry); return }
+            if Widgets.contains(Widgets.backRect, p) { go(to: .pantry); return true }
         case .valley:
-            if Widgets.contains(Widgets.backRect, p) { go(to: .garden); return }
-            if Widgets.contains(ValleyRenderer.stallRect, p) { go(to: .stall); return }
+            if Widgets.contains(Widgets.backRect, p) { go(to: .garden); return true }
+            if Widgets.contains(ValleyRenderer.stallRect, p) { go(to: .stall); return true }
             if let plot = ValleyRenderer.plot(at: p) {
                 if let owned = world.gardens.first(where: { $0.plot == plot }) { currentGarden = owned.id; go(to: .garden) }
                 else { go(to: .picker(plot)) }
-                return
+                return true
             }
         case .stall:
-            if Widgets.contains(Widgets.backRect, p) { go(to: stallReturnsToGarden ? .garden : .valley); return }
+            if Widgets.contains(Widgets.backRect, p) { go(to: stallReturnsToGarden ? .garden : .valley); return true }
             if Widgets.contains(StallRenderer.tradeRect, p) {
                 if world.buyHiveBox() { stall.show("+1 hive box in your shed"); onChange?() }
                 else { stall.show("need \(World.hiveBoxPrice) jars") }
-                return
+                return true
             }
-            if Widgets.contains(StallRenderer.valleyRect, p) { go(to: .valley); return }
+            if Widgets.contains(StallRenderer.valleyRect, p) { go(to: .valley); return true }
         case .picker(let plot):
-            if Widgets.contains(Widgets.backRect, p) { go(to: .valley); return }
+            if Widgets.contains(Widgets.backRect, p) { go(to: .valley); return true }
             for (i, kind) in GardenKind.allCases.enumerated() where Widgets.contains(StallRenderer.pickerRect(i), p) {
                 if let garden = world.buyGarden(kind: kind, plot: plot) {
                     currentGarden = garden.id
                     go(to: .garden)
                     onChange?()
                 } else { stall.show("need \(world.gardenPrice()) jars") }
-                return
+                return true
             }
         }
-        window?.performDrag(with: event)
+        return false
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -191,11 +195,13 @@ final class SceneView: NSView {
         drag = d
     }
 
-    override func mouseUp(with event: NSEvent) {
+    override func mouseUp(with event: NSEvent) { release(pixelPoint(event)) }
+
+    func release(_ p: (x: Double, y: Double)) {
         guard let d = drag else { return }
         drag = nil
         if d.moved {
-            if overShed(pixelPoint(event)) {
+            if overShed(p) {
                 if world.pack(hive: d.hive) == .packing, let hive = world.hive(d.hive) { show(["\(hive.name) is packing up"]); onChange?() }
                 else { show(["Not right now", "the bees are busy"]) }
             } else if world.move(hive: d.hive, x: d.at.x, y: d.at.y) { onChange?() }
@@ -340,14 +346,19 @@ final class SceneView: NSView {
     @objc private func frame(_ link: CADisplayLink) {
         let dt = lastTimestamp.map { min(0.1, link.timestamp - $0) } ?? 1.0 / 30
         lastTimestamp = link.timestamp
-        advance(by: dt, visible: true)
-        let minute = Clock.minute(at: Date()), time = CACurrentMediaTime() - startTime
         Widgets.updateInset(viewWidth: bounds.width)
+        layer?.contents = step(dt: dt, minute: Clock.minute(at: Date()), time: CACurrentMediaTime() - startTime)?.makeImage()
+    }
+
+    func wake() { sleep = (Self.sleepHold, true) }
+
+    func step(dt: Double, minute: Double, time: Double) -> PixelCanvas? {
+        advance(by: dt, visible: true, minute: minute, time: time)
         Widgets.backHovered = scene != .garden && (mouse.map { Widgets.contains(Widgets.backRect, $0) } ?? false)
         let canvas: PixelCanvas
         switch scene {
         case .garden:
-            guard let garden else { return }
+            guard let garden else { return nil }
             var ghost: GardenRenderer.Ghost?
             if let d = drag, d.moved {
                 let packing = mouse.map(overShed) ?? false
@@ -387,7 +398,7 @@ final class SceneView: NSView {
             Widgets.note(canvas, lines: n.lines, x: (Layout.width - (n.lines.map(PixelFont.width).max() ?? 0) - 10) / 2, y: 70)
         }
         if sleep != nil { drawSleep(canvas, dt: dt) }
-        layer?.contents = canvas.makeImage()
+        return canvas
     }
 
     private func drawSleep(_ canvas: PixelCanvas, dt: Double) {
@@ -450,9 +461,9 @@ final class SceneView: NSView {
         PixelFont.draw(hint, on: canvas, x: r.x + (r.w - PixelFont.width(hint)) / 2, y: r.y + r.h - 31, colour: Widgets.C.ink)
     }
 
-    private func advance(by dt: Double, visible: Bool) {
+    private func advance(by dt: Double, visible: Bool, minute: Double = Clock.minute(at: Date()), time: Double? = nil) {
         let gardenOnScreen = visible && scene == .garden ? currentGarden : nil
-        world.tick(dt, minute: Clock.minute(at: Date()), time: CACurrentMediaTime() - startTime, visibleGarden: gardenOnScreen)
+        world.tick(dt, minute: minute, time: time ?? CACurrentMediaTime() - startTime, visibleGarden: gardenOnScreen)
         world.agePuffs(dt)
     }
 }

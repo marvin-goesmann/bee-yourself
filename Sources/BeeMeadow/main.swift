@@ -14,6 +14,11 @@ if let index = arguments.firstIndex(of: "--icon"), index + 1 < arguments.count {
     exit(0)
 }
 
+if let index = arguments.firstIndex(of: "--record"), index + 1 < arguments.count {
+    MainActor.assumeIsolated { Recorder.run(to: arguments[index + 1]) }
+    exit(0)
+}
+
 if arguments.contains("--selftest") {
     exit(SelfTest.run() ? 0 : 1)
 }

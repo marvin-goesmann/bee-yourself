@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bee yourself</title>
+<meta name="description" content="A cosy pixel-art beehive that lives in a corner of your Mac.">
+<meta property="og:title" content="Bee yourself">
+<meta property="og:description" content="A cosy pixel-art beehive that lives in a corner of your Mac.">
+<meta property="og:image" content="/poster.jpg">
+<link rel="icon" href="/favicon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #3b2416;
+    --honey: #f2c94c;
+    --honey-hi: #ffe08a;
+    --honey-deep: #d89a22;
+    --cream: #fff6dc;
+    --night: #1a1426;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--night);
+    color: var(--cream);
+    font-family: "Silkscreen", ui-monospace, monospace;
+    overflow: hidden;
+  }
+  #glow {
+    position: fixed; inset: -10%;
+    width: 120%; height: 120%;
+    filter: blur(60px) saturate(1.2) brightness(0.55);
+    transition: opacity 1s;
+  }
+  main {
+    position: relative;
+    height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: clamp(16px, 3vh, 28px);
+    padding: 16px;
+  }
+  .screen {
+    width: min(100%, calc((100dvh - 150px) * 4 / 3));
+    aspect-ratio: 4 / 3;
+    border: 4px solid var(--ink);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 0 0 3px rgba(255, 246, 220, 0.12), 0 24px 60px rgba(0, 0, 0, 0.45);
+    background: #000;
+  }
+  video {
+    display: block; width: 100%; height: 100%;
+    object-fit: cover;
+    image-rendering: pixelated;
+  }
+  .bar {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center;
+  }
+  h1 {
+    font-size: clamp(20px, 3vw, 28px);
+    font-weight: 400;
+    letter-spacing: 1px;
+    text-shadow: 3px 3px 0 var(--ink);
+    margin-right: 10px;
+  }
+  .download {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 10px 18px 12px;
+    background: var(--honey);
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 16px;
+    border: 3px solid var(--ink);
+    border-radius: 4px;
+    box-shadow: inset 0 3px 0 var(--honey-hi), inset 0 -4px 0 var(--honey-deep), 0 4px 0 var(--ink);
+    transition: transform 0.08s, box-shadow 0.08s;
+  }
+  .download:hover { transform: translateY(-2px); box-shadow: inset 0 3px 0 var(--honey-hi), inset 0 -4px 0 var(--honey-deep), 0 6px 0 var(--ink); }
+  .download:active { transform: translateY(3px); box-shadow: inset 0 3px 0 var(--honey-hi), inset 0 -4px 0 var(--honey-deep), 0 1px 0 var(--ink); }
+  .download svg { width: 16px; height: 16px; }
+  .small {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px;
+    color: var(--cream);
+    opacity: 0.75;
+    border-radius: 6px;
+    background: none; border: 0; cursor: pointer;
+    font: inherit;
+    transition: opacity 0.15s, background 0.15s;
+  }
+  .small:hover, .small:focus-visible, .small[aria-expanded="true"] { opacity: 1; background: rgba(255, 246, 220, 0.1); }
+  .small svg { width: 22px; height: 22px; }
+  .help { position: relative; }
+  .tip {
+    position: absolute; bottom: calc(100% + 10px); left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    width: min(300px, calc(100vw - 32px));
+    padding: 12px 14px;
+    background: var(--cream);
+    color: var(--ink);
+    border: 3px solid var(--ink);
+    border-radius: 4px;
+    font-family: ui-rounded, -apple-system, system-ui, sans-serif;
+    font-size: 14px; line-height: 1.45;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  .tip p + p { margin-top: 8px; }
+  .tip a { color: inherit; }
+  .help:hover .tip, .help:focus-within .tip, .help.open .tip { opacity: 1; pointer-events: auto; transform: translateX(-50%); }
+  .tip::after {
+    content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    border: 8px solid transparent; border-top-color: var(--ink);
+  }
+  @media (max-width: 560px) {
+    .tip { left: auto; right: -50px; transform: translateY(4px); }
+    .help:hover .tip, .help:focus-within .tip, .help.open .tip { transform: none; }
+    .tip::after { left: auto; right: 64px; transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { #glow { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="glow" width="16" height="12" aria-hidden="true"></canvas>
+<main>
+  <div class="screen">
+    <video id="game" src="/gameplay.mp4" poster="/poster.jpg" autoplay muted loop playsinline aria-label="Bees flying between their hives and the flowers, from morning to night"></video>
+  </div>
+  <div class="bar">
+    <h1>Bee yourself</h1>
+    <a class="download" href="https://github.com/marvin-goesmann/bee-yourself/releases/latest/download/Bee-yourself.zip">
+      <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7 1h2v8h2l-3 4-3-4h2zM2 13h12v2H2z"/></svg>
+      Download for Mac
+    </a>
+    <div class="help" id="help">
+      <button class="small" aria-expanded="false" aria-describedby="tip" aria-label="Opening it the first time">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6 3h4v1h1v3h-1v1H9v2H7V7h1V6h1V4H7v1H5V4h1zM7 11h2v2H7z"/></svg>
+      </button>
+      <div class="tip" id="tip" role="tooltip">
+        <p>The app isn't notarised by Apple yet, so macOS blocks it the first time. Open System Settings, then Privacy &amp; Security, and click Open Anyway.</p>
+        <p>It's all open source on <a href="https://github.com/marvin-goesmann/bee-yourself">GitHub</a>. Needs macOS 26.</p>
+      </div>
+    </div>
+    <a class="small" href="https://github.com/marvin-goesmann/bee-yourself" aria-label="Source on GitHub">
+      <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+    </a>
+  </div>
+</main>
+<script>
+  const video = document.getElementById("game");
+  const glow = document.getElementById("glow");
+  const ctx = glow.getContext("2d");
+  function paint() {
+    if (video.readyState >= 2) ctx.drawImage(video, 0, 0, glow.width, glow.height);
+    setTimeout(() => requestAnimationFrame(paint), 200);
+  }
+  paint();
+
+  const help = document.getElementById("help");
+  const button = help.querySelector("button");
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const open = help.classList.toggle("open");
+    button.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", (event) => {
+    if (!help.contains(event.target)) { help.classList.remove("open"); button.setAttribute("aria-expanded", "false"); }
+  });
+</script>
+</body>
+</html>
