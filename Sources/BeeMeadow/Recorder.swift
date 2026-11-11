@@ -9,28 +9,13 @@ enum Recorder {
         case move(Double, () -> P)
         case click
         case release
+        case day(Double)
     }
 
     private static let fps = 30.0
     private static let dt = 1 / fps
 
-    private static let minuteKeys: [(t: Double, minute: Double)] = [
-        (0, 5), (6, 9), (20, 24), (34, 40), (44, 53), (50, 60), (60, 64),
-    ]
-
-    private static let arrow = [
-        "X.......",
-        "XX......",
-        "XWX.....",
-        "XWWX....",
-        "XWWWX...",
-        "XWWWWX..",
-        "XWWWWWX.",
-        "XWWWXXXX",
-        "XWXWX...",
-        "XX.XWX..",
-        "X...XX..",
-    ]
+    nonisolated(unsafe) private static var minuteKeys: [(t: Double, minute: Double)] = [(0, 5)]
 
     static func run(to directory: String) {
         try? FileManager.default.removeItem(atPath: directory)
@@ -40,10 +25,11 @@ enum Recorder {
         let world = demoWorld()
         let view = SceneView(world: world, currentGarden: 0)
         let steps = script(world: world, view: view)
+        minuteKeys = keys(for: steps)
         view.wake()
 
-        var cursor: P = (250, 150)
-        var index = 0, stepTime = 0.0, from = cursor, frame = 0, clickAge = 9.0
+        var cursor: P = (120, 90)
+        var index = 0, stepTime = 0.0, frame = 0, clickAge = 9.0, hovering = false
         var time = 40.0
         while index < steps.count {
             let t = Double(frame) * dt
@@ -53,11 +39,8 @@ enum Recorder {
                 stepTime += dt
                 if stepTime >= d { index += 1; stepTime = 0 }
             case .move(let d, let target):
-                if stepTime == 0 { from = cursor }
                 stepTime += dt
-                let k = Clock.smooth(0, 1, min(1, stepTime / d)), to = target()
-                cursor = (from.x + (to.x - from.x) * k, from.y + (to.y - from.y) * k)
-                if stepTime >= d { index += 1; stepTime = 0 }
+                if stepTime >= d { cursor = target(); hovering = true; index += 1; stepTime = 0 }
             case .click:
                 view.click(cursor)
                 clickAge = 0
@@ -67,10 +50,14 @@ enum Recorder {
                 view.release(cursor)
                 index += 1
                 continue
+            case .day:
+                index += 1
+                continue
             }
-            view.mouse = cursor
+            if clickAge > 0.25 && clickAge < 0.25 + dt * 1.5 { hovering = false }
+            view.mouse = hovering ? cursor : nil
             guard let canvas = view.step(dt: dt, minute: Clock.fixedMinute ?? 30, time: time) else { break }
-            drawCursor(canvas, at: cursor, clickAge: clickAge)
+            drawRipple(canvas, at: cursor, clickAge: clickAge)
             clickAge += dt
             time += dt
             if let image = canvas.makeImage() {
@@ -89,35 +76,48 @@ enum Recorder {
         let back = centre((0, 2, 40, 14))
         let newPlot = world.freePlots().first { $0 != 4 } ?? 0
         return [
-            .wait(4.5),
-            .move(1.3, { hiveSpot }), .wait(0.4), .click, .release,
+            .day(5),
+            .wait(9.0), .day(14),
+            .move(0.5, { hiveSpot }), .wait(0.4), .click, .release,
             .wait(1.6),
-            .move(1.0, { centre(HiveRenderer.collectRect) }), .wait(0.3), .click,
+            .move(0.5, { centre(HiveRenderer.collectRect) }), .wait(0.5), .click,
             .wait(2.0),
-            .move(1.0, { back }), .wait(0.3), .click,
-            .wait(1.6),
-            .move(1.1, { centre(Widgets.pantryRect) }), .wait(0.3), .click,
-            .wait(0.6), .move(1.2, { (70, 80) }), .wait(0.6), .move(1.2, { (150, 110) }), .wait(1.0),
-            .move(1.1, { back }), .wait(0.3), .click,
-            .wait(1.4),
-            .move(1.0, { centre(Widgets.mapRect) }), .wait(0.3), .click,
-            .wait(1.0), .move(1.2, { centre(ValleyRenderer.stallRect) }), .wait(0.4), .click,
-            .wait(0.8), .move(1.0, { centre(StallRenderer.tradeRect) }), .wait(0.3), .click,
+            .move(0.5, { back }), .wait(0.5), .click,
+            .wait(3.2),
+            .move(0.5, { centre(Widgets.pantryRect) }), .wait(0.5), .click,
+            .wait(0.6), .move(0.5, { (70, 80) }), .wait(0.6), .move(0.5, { (150, 110) }), .wait(1.0),
+            .move(0.5, { back }), .wait(0.5), .click,
+            .wait(2.8),
+            .move(0.5, { centre(Widgets.mapRect) }), .wait(0.5), .click, .day(26),
+            .wait(1.0), .move(0.5, { centre(ValleyRenderer.stallRect) }), .wait(0.4), .click,
+            .wait(0.8), .move(0.5, { centre(StallRenderer.tradeRect) }), .wait(0.5), .click,
             .wait(1.8),
-            .move(1.0, { centre(StallRenderer.valleyRect) }), .wait(0.3), .click,
-            .wait(0.6), .move(1.2, { centre(ValleyRenderer.plotRect(newPlot)) }), .wait(0.4), .click,
-            .wait(0.6), .move(1.0, { centre(StallRenderer.pickerRect(1)) }), .wait(0.5), .move(0.8, { centre(StallRenderer.pickerRect(3)) }), .wait(0.5), .click,
-            .wait(2.2),
-            .move(1.0, { centre(Widgets.shedRect) }), .wait(0.3), .click,
-            .wait(0.8), .move(0.9, { centre(view.shedLayout().rows[0].rect) }), .wait(0.4), .click,
-            .move(1.2, { (70, 150) }), .wait(0.4), .click,
-            .wait(3.0),
-            .move(1.0, { centre(Widgets.mapRect) }), .wait(0.3), .click,
-            .wait(0.6), .move(1.1, { centre(ValleyRenderer.plotRect(4)) }), .wait(0.4), .click,
-            .wait(4.0),
-            .move(1.2, { centre(Widgets.bedRect) }), .wait(0.5), .click,
-            .wait(1.6),
+            .move(0.5, { centre(StallRenderer.valleyRect) }), .wait(0.5), .click,
+            .wait(0.6), .move(0.5, { centre(ValleyRenderer.plotRect(newPlot)) }), .wait(0.4), .click,
+            .wait(0.6), .move(0.5, { centre(StallRenderer.pickerRect(1)) }), .wait(0.5), .move(0.5, { centre(StallRenderer.pickerRect(3)) }), .wait(0.5), .click, .day(38),
+            .wait(4.4),
+            .move(0.5, { centre(Widgets.shedRect) }), .wait(0.5), .click,
+            .wait(0.8), .move(0.5, { centre(view.shedLayout().rows[0].rect) }), .wait(0.4), .click,
+            .move(0.5, { (70, 150) }), .wait(0.4), .click,
+            .wait(6.0), .day(54),
+            .move(0.5, { centre(Widgets.mapRect) }), .wait(0.5), .click,
+            .wait(0.6), .move(0.5, { centre(ValleyRenderer.plotRect(4)) }), .wait(0.4), .click, .day(60),
+            .wait(8.0),
+            .move(0.5, { centre(Widgets.bedRect) }), .wait(0.5), .click,
+            .wait(1.6), .day(65),
         ]
+    }
+
+    private static func keys(for steps: [Step]) -> [(t: Double, minute: Double)] {
+        var t = 0.0, keys: [(t: Double, minute: Double)] = []
+        for step in steps {
+            switch step {
+            case .wait(let d), .move(let d, _): t += d
+            case .day(let m): keys.append((t, m))
+            case .click, .release: break
+            }
+        }
+        return keys
     }
 
     private static func minute(at t: Double) -> Double {
@@ -146,25 +146,14 @@ enum Recorder {
         return world
     }
 
-    private static func drawCursor(_ canvas: PixelCanvas, at p: P, clickAge: Double) {
+    private static func drawRipple(_ canvas: PixelCanvas, at p: P, clickAge: Double) {
+        guard clickAge < 0.35 else { return }
         canvas.tint = .white
         let x = Int(p.x.rounded()), y = Int(p.y.rounded())
-        if clickAge < 0.3 {
-            let r = 2 + clickAge * 14, ring = RGB("#fff2c0")
-            for k in 0..<12 {
-                let a = Double(k) / 12 * 2 * .pi
-                canvas.pixel(x + Int((cos(a) * r).rounded()), y + Int((sin(a) * r).rounded()), ring)
-            }
-        }
-        let outline = RGB("#3b2416"), fill = RGB("#fff8e6")
-        for (row, line) in arrow.enumerated() {
-            for (col, ch) in line.enumerated() {
-                switch ch {
-                case "X": canvas.pixel(x + col, y + row, outline)
-                case "W": canvas.pixel(x + col, y + row, fill)
-                default: break
-                }
-            }
+        let r = 2 + clickAge * 16, ring = RGB("#fff2c0")
+        for k in 0..<14 {
+            let a = Double(k) / 14 * 2 * .pi
+            canvas.pixel(x + Int((cos(a) * r).rounded()), y + Int((sin(a) * r).rounded()), ring, alpha: 1 - clickAge / 0.35)
         }
     }
 }

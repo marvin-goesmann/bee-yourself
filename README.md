@@ -1,8 +1,8 @@
 # Bee yourself
 
-A cosy pixel-art beehive that lives in a corner of your Mac.
+[bee-yourself.vercel.app](https://bee-yourself.vercel.app)
 
-Bees fly between their hives and the flowers, make honey through a slow day and a short night, and you keep the jars. Trade honey at the stall for new hive boxes and gardens.
+![Bee yourself](site/poster.jpg)
 
 ## Build
 

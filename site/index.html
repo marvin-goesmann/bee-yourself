@@ -4,9 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bee yourself</title>
-<meta name="description" content="A cosy pixel-art beehive that lives in a corner of your Mac.">
 <meta property="og:title" content="Bee yourself">
-<meta property="og:description" content="A cosy pixel-art beehive that lives in a corner of your Mac.">
 <meta property="og:image" content="/poster.jpg">
 <link rel="icon" href="/favicon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -95,6 +93,9 @@
   .small:hover, .small:focus-visible, .small[aria-expanded="true"] { opacity: 1; background: rgba(255, 246, 220, 0.1); }
   .small svg { width: 22px; height: 22px; }
   .help { position: relative; }
+  .help .small { opacity: 1; width: 52px; height: 52px; }
+  .help .small img { width: 40px; height: 40px; image-rendering: pixelated; transition: transform 0.1s; }
+  .help .small:hover img, .help .small[aria-expanded="true"] img { transform: translateY(-2px); }
   .tip {
     position: absolute; bottom: calc(100% + 10px); left: 50%;
     transform: translateX(-50%) translateY(4px);
@@ -104,6 +105,7 @@
     color: var(--ink);
     border: 3px solid var(--ink);
     border-radius: 4px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     font-family: ui-rounded, -apple-system, system-ui, sans-serif;
     font-size: 14px; line-height: 1.45;
     opacity: 0; pointer-events: none;
@@ -119,7 +121,7 @@
   @media (max-width: 560px) {
     .tip { left: auto; right: -50px; transform: translateY(4px); }
     .help:hover .tip, .help:focus-within .tip, .help.open .tip { transform: none; }
-    .tip::after { left: auto; right: 64px; transform: none; }
+    .tip::after { left: auto; right: 66px; transform: none; }
   }
   @media (prefers-reduced-motion: reduce) { #glow { display: none; } }
 </style>
@@ -128,7 +130,7 @@
 <canvas id="glow" width="16" height="12" aria-hidden="true"></canvas>
 <main>
   <div class="screen">
-    <video id="game" src="/gameplay.mp4" poster="/poster.jpg" autoplay muted loop playsinline aria-label="Bees flying between their hives and the flowers, from morning to night"></video>
+    <video id="game" src="/gameplay.mp4?v=3" poster="/poster.jpg" autoplay muted loop playsinline aria-label="Bees flying between their hives and the flowers, from morning to night"></video>
   </div>
   <div class="bar">
     <h1>Bee yourself</h1>
@@ -138,7 +140,7 @@
     </a>
     <div class="help" id="help">
       <button class="small" aria-expanded="false" aria-describedby="tip" aria-label="Opening it the first time">
-        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6 3h4v1h1v3h-1v1H9v2H7V7h1V6h1V4H7v1H5V4h1zM7 11h2v2H7z"/></svg>
+        <img src="/gate.svg" alt="">
       </button>
       <div class="tip" id="tip" role="tooltip">
         <p>The app isn't notarised by Apple yet, so macOS blocks it the first time. Open System Settings, then Privacy &amp; Security, and click Open Anyway.</p>
