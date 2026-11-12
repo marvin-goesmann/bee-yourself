@@ -1,4 +1,11 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+#if canImport(WASILibc)
+import WASILibc
+#endif
 
 final class PantryRenderer {
     static let bookRect: PixelRect = (196, 3, 14, 13)
@@ -19,11 +26,6 @@ final class PantryRenderer {
     private var backdropReady = false
     private var scrollRow = 0
     private var lift: [Int: Double] = [:]
-    private let formatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "EEE d MMM, h:mma"
-        return f
-    }()
 
     func open(world: World) {
         scrollRow = max(0, rows(world) - Self.shelves.count)
@@ -123,7 +125,7 @@ final class PantryRenderer {
 
     private func drawTooltip(_ jar: Jar, at pos: (x: Int, y: Int)) {
         let line1 = jar.hiveName.map { "\(jar.honey) · \($0)" } ?? "\(jar.honey) honey"
-        let line2 = formatter.string(from: jar.collectedAt)
+        let line2 = LocalDate.dayAndTime(jar.collectedAt)
         let w = max(PixelFont.width(line1), PixelFont.width(line2)) + 10, h = 20
         let x = Double(min(Layout.width - w - 3, max(3, pos.x - 4))), y = Double(max(21, pos.y - h - 4))
         canvas.fill(x - 1, y - 1, w + 2, h + 2, C.tipText)

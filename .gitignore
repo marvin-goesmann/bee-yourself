@@ -6,3 +6,4 @@ docs/
 recording/
 Bee-yourself.zip
 .vercel
+.build-wasm/

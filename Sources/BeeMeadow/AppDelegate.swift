@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
@@ -30,8 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.isMovableByWindowBackground = false
         window.backgroundColor = .black
         window.delegate = self
-        sceneView = SceneView(world: world, currentGarden: loaded.currentGarden)
-        sceneView.onChange = { [weak self] in self?.save() }
+        sceneView = SceneView(game: Game(world: world, currentGarden: loaded.currentGarden))
+        sceneView.game.onChange = { [weak self] in self?.save() }
         window.contentView = sceneView
         window.center()
         window.setFrameAutosaveName("BeeMeadowWindow")
@@ -61,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for i in 0..<600 { world.tick(0.1, minute: minute, time: Double(i) * 0.1, visibleGarden: nil) }
     }
 
-    private func save() { Persistence.save(world, currentGarden: sceneView?.currentGarden ?? 0, now: Date()) }
+    private func save() { Persistence.save(world, currentGarden: sceneView?.game.currentGarden ?? 0, now: Date()) }
 
     private func applyFloat(_ on: Bool) {
         window.level = on ? .floating : .normal
@@ -93,3 +94,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.mainMenu = main
     }
 }
+#endif

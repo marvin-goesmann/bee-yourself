@@ -1,4 +1,11 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+#if canImport(WASILibc)
+import WASILibc
+#endif
 
 enum GardenKind: String, Codable, CaseIterable {
     case clover, heather, bramble, lavender, yellowBox, orangeBlossom

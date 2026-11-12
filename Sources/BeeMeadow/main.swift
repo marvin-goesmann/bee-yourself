@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 let arguments = CommandLine.arguments
@@ -34,7 +35,7 @@ if arguments.contains("--calibrate") {
 }
 
 if let index = arguments.firstIndex(of: "--time-scale"), index + 1 < arguments.count {
-    Clock.timeScale = Double(arguments[index + 1]) ?? 1
+    Clock.timeScale = Double(arguments[index + 1]) ?? 2
 }
 
 let app = NSApplication.shared
@@ -42,3 +43,4 @@ let delegate = AppDelegate()
 app.delegate = delegate
 app.setActivationPolicy(.regular)
 app.run()
+#endif

@@ -1,11 +1,18 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+#if canImport(WASILibc)
+import WASILibc
+#endif
 
 enum Clock {
     static let cycleMinutes = 75.0
     static let dayMinutes = 60.0
 
     static var fixedMinute: Double?
-    static var timeScale = 1.0
+    static var timeScale = 2.0
     static var offset: TimeInterval = 0
     static let wakeMinute = 5.0
 

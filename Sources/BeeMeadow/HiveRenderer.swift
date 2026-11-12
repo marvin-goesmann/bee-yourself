@@ -1,4 +1,11 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+#if canImport(WASILibc)
+import WASILibc
+#endif
 
 final class HiveRenderer {
     static let collectRect: PixelRect = (170, 162, 62, 13)
@@ -142,7 +149,9 @@ final class HiveRenderer {
         drawButton(ready: hive.isFull && displayedHoney >= 1, time: time)
         if world.readyToSplit(hive) {
             let target = world.splitTarget(for: hive) != nil
-            Widgets.button(canvas, HiveRenderer.splitRect, label: "Split", enabled: target, pulse: target ? 0.5 + 0.5 * sin(time * 3.9) : 0)
+            let invite = target && world.atFullStrength(hive)
+            Widgets.button(canvas, HiveRenderer.splitRect, label: "Split", enabled: target, pulse: invite ? 0.5 + 0.5 * sin(time * 3.9) : 0)
+            if invite { Widgets.ring(canvas, HiveRenderer.splitRect, time: time) }
             if !target, let mouse, Widgets.contains(HiveRenderer.splitRect, mouse) {
                 Widgets.note(canvas, lines: ["Needs an empty hive box"], x: HiveRenderer.splitRect.x - 2, y: HiveRenderer.splitRect.y - 19)
             }

@@ -1,4 +1,11 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+#if canImport(WASILibc)
+import WASILibc
+#endif
 
 typealias PixelRect = (x: Int, y: Int, w: Int, h: Int)
 
@@ -55,6 +62,21 @@ enum Widgets {
         canvas.fill(x, y, r.w, 1, enabled ? C.buttonLight : face.mixed(with: .white, 0.15))
         canvas.fill(x, y + Double(r.h - 1), r.w, 1, enabled ? C.buttonShade : face.mixed(with: C.outline, 0.25))
         PixelFont.draw(label, on: canvas, x: r.x + (r.w - PixelFont.width(label)) / 2, y: r.y + (r.h - 5) / 2, colour: enabled ? C.buttonText : C.buttonOffText)
+    }
+
+    static func ring(_ canvas: PixelCanvas, _ r: PixelRect, time: Double) {
+        canvas.tint = .white
+        let glow = 0.55 + 0.35 * sin(time * 3.2)
+        outline(canvas, r, pad: 2, colour: RGB("#ffd257"), alpha: glow)
+        outline(canvas, r, pad: 3, colour: RGB("#fff2c0"), alpha: glow * 0.45)
+    }
+
+    private static func outline(_ canvas: PixelCanvas, _ r: PixelRect, pad: Int, colour: RGB, alpha: Double) {
+        let x = Double(r.x - pad), y = Double(r.y - pad), w = r.w + pad * 2, h = r.h + pad * 2
+        canvas.fill(x + 1, y, w - 2, 1, colour, alpha: alpha)
+        canvas.fill(x + 1, y + Double(h - 1), w - 2, 1, colour, alpha: alpha)
+        canvas.fill(x, y + 1, 1, h - 2, colour, alpha: alpha)
+        canvas.fill(x + Double(w - 1), y + 1, 1, h - 2, colour, alpha: alpha)
     }
 
     static func note(_ canvas: PixelCanvas, lines: [String], x: Int, y: Int) {

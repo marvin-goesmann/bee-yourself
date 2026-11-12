@@ -1,4 +1,11 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+#if canImport(WASILibc)
+import WASILibc
+#endif
 
 private struct SaveV2: Codable {
     struct SavedGarden: Codable {
@@ -52,17 +59,7 @@ private struct SaveV1: Codable {
 }
 
 enum Persistence {
-    nonisolated(unsafe) static var testFileURL: URL?
-
-    static var fileURL: URL {
-        if let testFileURL { return testFileURL }
-        if let override = ProcessInfo.processInfo.environment["BEE_STATE_FILE"] { return URL(fileURLWithPath: override) }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("BeeMeadow", isDirectory: true).appendingPathComponent("state.json")
-    }
-
-    static func load(now: Date) -> (world: World, currentGarden: Int) {
-        guard let data = try? Data(contentsOf: fileURL) else { return (World.fresh(), 0) }
+    static func decode(_ data: Data, now: Date) -> (world: World, currentGarden: Int) {
         if let save = try? JSONDecoder.iso.decode(SaveV2.self, from: data), save.version == 2 {
             Clock.offset = save.clockOffset ?? 0
             let world = restore(save)
@@ -78,7 +75,7 @@ enum Persistence {
         return (World.fresh(), 0)
     }
 
-    static func save(_ world: World, currentGarden: Int, now: Date) {
+    static func encode(_ world: World, currentGarden: Int, now: Date) throws -> Data {
         let save = SaveV2(
             version: 2,
             savedAt: now,
@@ -92,13 +89,34 @@ enum Persistence {
             jars: world.jars, harvests: world.harvests, spareBoxes: world.spareBoxes,
             nextBeeID: world.nextBeeID, nextHiveID: world.nextHiveID, nextGardenID: world.nextGardenID, currentGarden: currentGarden, clockOffset: Clock.offset
         )
+        return try JSONEncoder.iso.encode(save)
+    }
+
+#if canImport(AppKit)
+    nonisolated(unsafe) static var testFileURL: URL?
+
+    static var fileURL: URL {
+        if let testFileURL { return testFileURL }
+        if let override = ProcessInfo.processInfo.environment["BEE_STATE_FILE"] { return URL(fileURLWithPath: override) }
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("BeeMeadow", isDirectory: true).appendingPathComponent("state.json")
+    }
+
+    static func load(now: Date) -> (world: World, currentGarden: Int) {
+        guard let data = try? Data(contentsOf: fileURL) else { return (World.fresh(), 0) }
+        return decode(data, now: now)
+    }
+
+    static func save(_ world: World, currentGarden: Int, now: Date) {
         do {
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder.iso.encode(save).write(to: fileURL, options: .atomic)
+            try encode(world, currentGarden: currentGarden, now: now).write(to: fileURL, options: .atomic)
         } catch {
             NSLog("BeeMeadow: failed to save state: \(error)")
         }
     }
+
+#endif
 
     private static func restore(_ save: SaveV2) -> World {
         let gardens = save.gardens.map { Garden(id: $0.id, kind: $0.kind, plot: $0.plot, nextHornetIn: $0.nextHornetIn ?? World.hornetMeanSeconds) }

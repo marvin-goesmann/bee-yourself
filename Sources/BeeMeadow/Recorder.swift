@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 @MainActor
@@ -23,7 +24,7 @@ enum Recorder {
         Widgets.inset = 0
         Clock.fixedMinute = minute(at: 0)
         let world = demoWorld()
-        let view = SceneView(world: world, currentGarden: 0)
+        let view = Game(world: world, currentGarden: 0)
         let steps = script(world: world, view: view)
         minuteKeys = keys(for: steps)
         view.wake()
@@ -69,7 +70,7 @@ enum Recorder {
         print("Wrote \(frame) frames (\(String(format: "%.1f", Double(frame) / fps))s)")
     }
 
-    private static func script(world: World, view: SceneView) -> [Step] {
+    private static func script(world: World, view: Game) -> [Step] {
         let hive = world.hives[1]
         let hiveSpot: P = (Double(hive.x + 9), Double(hive.y - 14))
         func centre(_ r: PixelRect) -> P { (Double(r.x) + Double(r.w) / 2, Double(r.y) + Double(r.h) / 2) }
@@ -128,7 +129,7 @@ enum Recorder {
     }
 
     private static func demoWorld() -> World {
-        let world = World.fresh()
+        let world = World.classic()
         world.hornetsEnabled = false
         world.jars = (0..<34).map { i in
             Jar(honey: ["Clover", "Clover", "Heather"][i % 3], hiveName: "Pip", collectedAt: Date().addingTimeInterval(Double(i - 34) * 3000))
@@ -157,3 +158,4 @@ enum Recorder {
         }
     }
 }
+#endif

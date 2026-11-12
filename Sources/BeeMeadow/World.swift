@@ -1,4 +1,11 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+#if canImport(WASILibc)
+import WASILibc
+#endif
 
 enum Layout {
     static let width = 240
@@ -17,9 +24,9 @@ struct Point {
 }
 
 struct SeededRandom {
-    private var seed: Int
+    private var seed: Int64
 
-    init(seed: Int) { self.seed = max(1, seed) }
+    init(seed: Int) { self.seed = max(1, Int64(seed)) }
 
     mutating func next() -> Double {
         seed = (seed * 16807) % 2_147_483_647
@@ -91,10 +98,10 @@ struct Hornet {
 final class World {
     static let colonyStrength = 36
     static let foragerShare = 0.6
-    static let hatchSeconds = 300.0
+    static let hatchSeconds = 150.0
     static let queenSeconds = 300.0
     static let flightSpeed = 24.0
-    static let tripYield = 1.0 / 3100
+    static let tripYield = 1.0 / 1550
     static let tripsPerForagerMinute = 3.5
     static let hivesPerGarden = 4
     static let hiveBoxPrice = 3
@@ -138,19 +145,35 @@ final class World {
     }
 
     static func fresh() -> World {
+        let gardens = [
+            Garden(id: 0, kind: .clover, plot: 4, nextHornetIn: hornetMeanSeconds),
+            Garden(id: 1, kind: .lavender, plot: 5, nextHornetIn: hornetMeanSeconds),
+        ]
+        let spot = Layout.startingHiveSpots[1]
+        let hives = gardens.enumerated().map { i, garden in
+            Hive(id: i, name: names[i], garden: garden.id, x: spot.x, y: spot.y, honey: [0.55, 0.3][i])
+        }
+        let bees = startingBees(for: hives)
+        return World(gardens: gardens, hives: hives, bees: bees, jars: [], harvests: [], spareBoxes: 1, nextBeeID: bees.count, nextHiveID: hives.count, nextGardenID: gardens.count)
+    }
+
+    #if canImport(AppKit)
+    static func classic() -> World {
         let garden = Garden(id: 0, kind: .clover, plot: 4, nextHornetIn: hornetMeanSeconds)
-        var bees: [Bee] = []
-        var id = 0
         let hives = Layout.startingHiveSpots.enumerated().map { i, spot in
             Hive(id: i, name: names[i], garden: 0, x: spot.x, y: spot.y, honey: [0.55, 0.3, 0.1][i])
         }
+        let bees = startingBees(for: hives)
+        return World(gardens: [garden], hives: hives, bees: bees, jars: [], harvests: [], spareBoxes: 0, nextBeeID: bees.count, nextHiveID: hives.count, nextGardenID: 1)
+    }
+    #endif
+
+    private static func startingBees(for hives: [Hive]) -> [Bee] {
+        var bees: [Bee] = []
         for hive in hives {
-            for position in 0..<34 {
-                bees.append(Bee(id: id, hive: hive.id, role: defaultRole(position: position)))
-                id += 1
-            }
+            for position in 0..<34 { bees.append(Bee(id: bees.count, hive: hive.id, role: defaultRole(position: position))) }
         }
-        return World(gardens: [garden], hives: hives, bees: bees, jars: [], harvests: [], spareBoxes: 0, nextBeeID: id, nextHiveID: hives.count, nextGardenID: 1)
+        return bees
     }
 
     static func defaultRole(position: Int) -> Bee.Role {
@@ -178,14 +201,19 @@ final class World {
 
     func isEmptyBox(_ hive: Hive) -> Bool { hive.queenEmergesIn == nil && !bees.contains { $0.hive == hive.id } && !bees.contains { isHeading(to: hive.id, $0) } }
 
-    func readyToSplit(_ hive: Hive) -> Bool { hasQueen(hive: hive.id) && beeCount(hive: hive.id) >= World.colonyStrength }
+    func readyToSplit(_ hive: Hive) -> Bool { hasQueen(hive: hive.id) && beeCount(hive: hive.id) >= World.colonyStrength / 2 }
+
+    func atFullStrength(_ hive: Hive) -> Bool { beeCount(hive: hive.id) >= World.colonyStrength }
 
     func splitTarget(for source: Hive) -> Hive? {
         let empty = hives.filter { $0.id != source.id && !$0.isPacked && !$0.packing && isEmptyBox($0) }
         return empty.first { $0.garden == source.garden } ?? empty.first
     }
 
-    func gardenPrice() -> Int { 10 + (gardens.count - 1) * (gardens.count + 2) }
+    func gardenPrice() -> Int {
+        let extra = max(0, gardens.count - 2)
+        return 10 + extra * (extra + 3)
+    }
 
     func freePlots() -> [Int] { (0..<Layout.plots).filter { plot in !gardens.contains { $0.plot == plot } } }
 

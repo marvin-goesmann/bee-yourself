@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 enum AppIcon {
@@ -86,3 +87,4 @@ enum AppIcon {
         try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
     }
 }
+#endif

@@ -1,4 +1,11 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+#if canImport(WASILibc)
+import WASILibc
+#endif
 
 final class BookRenderer {
     private static let lineHeight = 9
@@ -12,12 +19,6 @@ final class BookRenderer {
 
     let canvas = PixelCanvas(width: Layout.width, height: Layout.height)
     private var scroll = 0
-    private let formatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "EEE d MMM"
-        return f
-    }()
-
     func open() { scroll = 0 }
 
     func scroll(by delta: Int, world: World) {
@@ -25,15 +26,14 @@ final class BookRenderer {
     }
 
     private func lines(_ world: World) -> [(label: String?, jars: ArraySlice<Jar>)] {
-        let calendar = Calendar.current
-        let days = Dictionary(grouping: world.harvests) { calendar.startOfDay(for: $0.collectedAt) }
+        let days = Dictionary(grouping: world.harvests) { LocalDate.startOfDay($0.collectedAt) }
         var result: [(String?, ArraySlice<Jar>)] = []
         for day in days.keys.sorted(by: >) {
             let jars = days[day] ?? []
             var start = 0
             while start < jars.count {
                 let end = min(jars.count, start + BookRenderer.jarsPerLine)
-                result.append((start == 0 ? formatter.string(from: day) : nil, jars[start..<end]))
+                result.append((start == 0 ? LocalDate.day(day) : nil, jars[start..<end]))
                 start = end
             }
         }

@@ -1,5 +1,14 @@
-import CoreGraphics
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+#if canImport(WASILibc)
+import WASILibc
+#endif
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 struct RGB: Equatable {
     var r: Double
@@ -33,24 +42,16 @@ struct RGB: Equatable {
 }
 
 final class PixelCanvas {
-    private static let colourSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-
     let width: Int
     let height: Int
     let pixels: UnsafeMutablePointer<UInt8>
     var tint = RGB.white
-    private let context: CGContext
 
     init(width: Int, height: Int) {
         self.width = width
         self.height = height
         pixels = .allocate(capacity: width * height * 4)
         pixels.initialize(repeating: 255, count: width * height * 4)
-        context = CGContext(
-            data: pixels, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
-            space: PixelCanvas.colourSpace,
-            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
-        )!
     }
 
     deinit { pixels.deallocate() }
@@ -93,5 +94,18 @@ final class PixelCanvas {
         pixels.update(from: other.pixels, count: width * height * 4)
     }
 
-    func makeImage() -> CGImage? { context.makeImage() }
 }
+
+#if canImport(CoreGraphics)
+extension PixelCanvas {
+    private static let colourSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+
+    func makeImage() -> CGImage? {
+        CGContext(
+            data: pixels, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: PixelCanvas.colourSpace,
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        )?.makeImage()
+    }
+}
+#endif

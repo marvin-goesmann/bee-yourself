@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 enum Snapshot {
@@ -111,3 +112,4 @@ enum Snapshot {
         print(String(format: "garden render: %.3f ms", (CFAbsoluteTimeGetCurrent() - start) / 300 * 1000))
     }
 }
+#endif

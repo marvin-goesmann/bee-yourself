@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import Foundation
 
 enum SelfTest {
@@ -10,7 +11,7 @@ enum SelfTest {
         Persistence.testFileURL = FileManager.default.temporaryDirectory.appendingPathComponent("beemeadow-selftest-\(UUID().uuidString).json")
         defer { Persistence.testFileURL.map { try? FileManager.default.removeItem(at: $0) } }
         Clock.fixedMinute = 30
-        let world = World.fresh()
+        let world = World.classic()
         world.hornetsEnabled = false
         let dt = 0.1
         func run(seconds: Double, visible: Int? = nil) {
@@ -98,6 +99,22 @@ enum SelfTest {
         let loaded = Persistence.load(now: Date())
         check(loaded.world.bees.count == world.bees.count && loaded.world.hives.count == world.hives.count && loaded.world.gardens.count == 2, "save and load round trip")
         check(loaded.currentGarden == garden!.id, "remembers current garden")
+
+        let start = World.fresh()
+        check(start.gardens.count == 2 && start.hives.count == 2 && start.spareBoxes == 1, "new game: two gardens, one hive each, a free box")
+        check(Set(start.hives.map(\.garden)).count == 2 && start.gardenPrice() == 10, "one hive per garden, next garden still 10 jars")
+        let pip = start.hives[0]
+        while start.beeCount(hive: pip.id) >= World.colonyStrength / 2, let i = start.bees.firstIndex(where: { $0.hive == pip.id && $0.role != .queen }) {
+            start.bees.remove(at: i)
+        }
+        check(!start.readyToSplit(pip), "split waits for half strength")
+        while start.beeCount(hive: pip.id) < World.colonyStrength / 2 {
+            start.bees.append(Bee(id: start.nextBeeID, hive: pip.id, role: .house))
+            start.nextBeeID += 1
+        }
+        check(start.readyToSplit(pip) && !start.atFullStrength(pip), "half strength hive can split")
+        check(start.placeBox(x: 100, y: 160, in: pip.garden) && start.split(hive: pip.id) != nil, "first split into the free box")
         return ok
     }
 }
+#endif

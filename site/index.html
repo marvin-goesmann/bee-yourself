@@ -42,6 +42,7 @@
     padding: 16px;
   }
   .screen {
+    position: relative;
     width: min(100%, calc((100dvh - 150px) * 4 / 3));
     aspect-ratio: 4 / 3;
     border: 4px solid var(--ink);
@@ -50,11 +51,22 @@
     box-shadow: 0 0 0 3px rgba(255, 246, 220, 0.12), 0 24px 60px rgba(0, 0, 0, 0.45);
     background: #000;
   }
-  video {
+  video, #live {
     display: block; width: 100%; height: 100%;
     object-fit: cover;
     image-rendering: pixelated;
   }
+  #live { touch-action: none; }
+  [hidden] { display: none !important; }
+  .play {
+    position: absolute; left: 50%; bottom: 8%;
+    transform: translateX(-50%);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .play:hover { transform: translateX(-50%) translateY(-2px); }
+  .play:active { transform: translateX(-50%) translateY(3px); }
+  .play[disabled] { cursor: progress; }
   .bar {
     display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center;
   }
@@ -65,7 +77,7 @@
     text-shadow: 3px 3px 0 var(--ink);
     margin-right: 10px;
   }
-  .download {
+  .download, .play {
     display: inline-flex; align-items: center; gap: 10px;
     padding: 10px 18px 12px;
     background: var(--honey);
@@ -77,9 +89,11 @@
     box-shadow: inset 0 3px 0 var(--honey-hi), inset 0 -4px 0 var(--honey-deep), 0 4px 0 var(--ink);
     transition: transform 0.08s, box-shadow 0.08s;
   }
-  .download:hover { transform: translateY(-2px); box-shadow: inset 0 3px 0 var(--honey-hi), inset 0 -4px 0 var(--honey-deep), 0 6px 0 var(--ink); }
-  .download:active { transform: translateY(3px); box-shadow: inset 0 3px 0 var(--honey-hi), inset 0 -4px 0 var(--honey-deep), 0 1px 0 var(--ink); }
-  .download svg { width: 16px; height: 16px; }
+  .download:hover { transform: translateY(-2px); }
+  .download:hover, .play:hover { box-shadow: inset 0 3px 0 var(--honey-hi), inset 0 -4px 0 var(--honey-deep), 0 6px 0 var(--ink); }
+  .download:active { transform: translateY(3px); }
+  .download:active, .play:active { box-shadow: inset 0 3px 0 var(--honey-hi), inset 0 -4px 0 var(--honey-deep), 0 1px 0 var(--ink); }
+  .download svg, .play svg { width: 16px; height: 16px; }
   .small {
     display: inline-flex; align-items: center; justify-content: center;
     width: 44px; height: 44px;
@@ -131,6 +145,11 @@
 <main>
   <div class="screen">
     <video id="game" src="/gameplay.mp4?v=3" poster="/poster.jpg" autoplay muted loop playsinline aria-label="Bees flying between their hives and the flowers, from morning to night"></video>
+    <canvas id="live" width="240" height="180" hidden></canvas>
+    <button class="play" id="play">
+      <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2h2v1h2v1h2v1h2v1h1v4h-1v1h-2v1H8v1H6v1H4z"/></svg>
+      <span>Play</span>
+    </button>
   </div>
   <div class="bar">
     <h1>Bee yourself</h1>
@@ -152,15 +171,38 @@
     </a>
   </div>
 </main>
-<script>
+<script type="module">
+  import { start } from "/game.js?v=5";
+
   const video = document.getElementById("game");
+  const live = document.getElementById("live");
   const glow = document.getElementById("glow");
   const ctx = glow.getContext("2d");
+  let source = video;
   function paint() {
-    if (video.readyState >= 2) ctx.drawImage(video, 0, 0, glow.width, glow.height);
+    if (source !== video || video.readyState >= 2) ctx.drawImage(source, 0, 0, glow.width, glow.height);
     setTimeout(() => requestAnimationFrame(paint), 200);
   }
   paint();
+
+  const play = document.getElementById("play");
+  const label = play.querySelector("span");
+  play.addEventListener("click", async () => {
+    play.disabled = true;
+    label.textContent = "Waking the bees";
+    try {
+      await start(live);
+      video.pause();
+      video.hidden = true;
+      live.hidden = false;
+      play.hidden = true;
+      source = live;
+    } catch (error) {
+      console.error(error);
+      play.disabled = false;
+      label.textContent = "Couldn't load, try again";
+    }
+  });
 
   const help = document.getElementById("help");
   const button = help.querySelector("button");
