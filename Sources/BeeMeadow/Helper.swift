@@ -3,6 +3,9 @@ import FoundationEssentials
 #else
 import Foundation
 #endif
+#if canImport(WASILibc)
+import WASILibc
+#endif
 
 enum HelperKind: String, Codable, CaseIterable {
     case bear, badger, hedgehog, mouse
