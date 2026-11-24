@@ -109,6 +109,14 @@ final class World {
     static let helperSpeed = 16.0
     static let helperArea = (minX: 8, maxX: 232, minY: Layout.horizon + 14, maxY: 174)
     static let hornetMeanSeconds = 7200.0
+    static let factoryPrice = 1000
+    static let factoryHoneyName = "Blended"
+    static let factoryName = "Factory"
+    static let ringPriceMultiplier = 10
+    static let fullValleyHives = Layout.plots * hivesPerGarden
+    static let fullStrengthForagers = Int((Double(colonyStrength) * foragerShare).rounded(.up))
+    static let factoryJarsPerMinute = 2 * Double(fullValleyHives * fullStrengthForagers) * tripsPerForagerMinute * tripYield
+    static let campArea = (minX: 10, maxX: 64, minY: 150, maxY: 172)
     static let names = [
         "Pip", "Hazel", "Juniper", "Willow", "Fern", "Maple", "Poppy", "Sorrel", "Wren", "Acorn", "Pebble", "Thistle", "Marigold",
         "Sage", "Rowan", "Nutmeg", "Biscuit", "Moss", "Dandelion", "Button", "Clove", "Tansy", "Ember", "Olive", "Cobble",
@@ -125,13 +133,15 @@ final class World {
     var nextBeeID: Int
     var nextHiveID: Int
     var nextGardenID: Int
+    var hasFactory: Bool
+    var factoryHoney: Double
     var completedTrips = 0
     var hornetsEnabled = true
     private(set) var clock = 0.0
     private var hiveByID: [Int: Hive] = [:]
     private var random = SeededRandom(seed: Int(Date().timeIntervalSince1970) % 100_000 + 1)
 
-    init(gardens: [Garden], hives: [Hive], bees: [Bee], jars: [Jar], harvests: [Jar], spareBoxes: Int, nextBeeID: Int, nextHiveID: Int, nextGardenID: Int, helpers: [Helper] = []) {
+    init(gardens: [Garden], hives: [Hive], bees: [Bee], jars: [Jar], harvests: [Jar], spareBoxes: Int, nextBeeID: Int, nextHiveID: Int, nextGardenID: Int, helpers: [Helper] = [], hasFactory: Bool = false, factoryHoney: Double = 0) {
         self.gardens = gardens
         self.hives = hives
         self.bees = bees
@@ -142,6 +152,8 @@ final class World {
         self.nextBeeID = nextBeeID
         self.nextHiveID = nextHiveID
         self.nextGardenID = nextGardenID
+        self.hasFactory = hasFactory
+        self.factoryHoney = factoryHoney
         reindex()
         for i in self.bees.indices {
             self.bees[i].wobble = random.next() * 6.28
@@ -198,7 +210,9 @@ final class World {
 
     var storedHelpers: [Helper] { helpers.filter(\.isStored) }
 
-    var canHireHelper: Bool { helpers.count < gardens.count }
+    var canHireHelper: Bool { helpers.filter { !$0.isHomeless }.count < gardens.count }
+
+    var homelessHelpers: [Helper] { helpers.filter(\.isHomeless) }
 
     func helper(in garden: Int) -> Helper? { helpers.first { $0.garden == garden } }
 
@@ -228,12 +242,42 @@ final class World {
         return empty.first { $0.garden == source.garden } ?? empty.first
     }
 
-    func gardenPrice() -> Int {
-        let extra = max(0, gardens.count - 2)
-        return 10 + extra * (extra + 3)
+    func gardens(in valley: Valley) -> [Garden] { gardens.filter { $0.valley == valley } }
+
+    func garden(in valley: Valley, plot: Int) -> Garden? { gardens.first { $0.valley == valley && $0.plot == plot } }
+
+    func priceMultiplier(in valley: Valley) -> Int {
+        (0..<valley.ring).reduce(1) { total, _ in total * World.ringPriceMultiplier }
     }
 
-    func freePlots() -> [Int] { (0..<Layout.plots).filter { plot in !gardens.contains { $0.plot == plot } } }
+    func gardenPrice(in valley: Valley = .home) -> Int {
+        let extra = max(0, gardens(in: valley).count - 2)
+        return (10 + extra * (extra + 3)) * priceMultiplier(in: valley)
+    }
+
+    func hiveBoxPrice(in valley: Valley) -> Int { World.hiveBoxPrice * priceMultiplier(in: valley) }
+
+    func helperPrice(in valley: Valley) -> Int { World.helperPrice * priceMultiplier(in: valley) }
+
+    func freePlots(in valley: Valley = .home) -> [Int] { (0..<Layout.plots).filter { garden(in: valley, plot: $0) == nil } }
+
+    var canBuildFactory: Bool { !hasFactory && jars.count >= World.factoryPrice }
+
+    static func valleys(inRing ring: Int) -> [Valley] {
+        guard ring > 0 else { return [.home] }
+        return (-ring...ring).flatMap { y in (-ring...ring).map { x in Valley(x: x, y: y) } }.filter { $0.ring == ring }
+    }
+
+    var openRing: Int {
+        guard hasFactory else { return 0 }
+        var ring = 1
+        while World.valleys(inRing: ring).allSatisfy({ !gardens(in: $0).isEmpty }) { ring += 1 }
+        return ring
+    }
+
+    func isOpen(_ valley: Valley) -> Bool {
+        hasFactory ? valley.ring >= 1 && valley.ring <= openRing : valley == .home
+    }
 
     private func isLeaving(_ bee: Bee) -> Bool {
         if case .relocating(_, let stage, _) = bee.state { return stage >= 1 }
@@ -259,17 +303,19 @@ final class World {
         return jar
     }
 
-    func buyHiveBox() -> Bool {
-        guard jars.count >= World.hiveBoxPrice else { return false }
-        jars.removeFirst(World.hiveBoxPrice)
+    func buyHiveBox(in valley: Valley = .home) -> Bool {
+        let price = hiveBoxPrice(in: valley)
+        guard jars.count >= price else { return false }
+        jars.removeFirst(price)
         spareBoxes += 1
         return true
     }
 
-    func hireHelper(_ kind: HelperKind) -> Helper? {
-        guard jars.count >= World.helperPrice, canHireHelper else { return nil }
-        jars.removeFirst(World.helperPrice)
-        let helper = Helper(id: (helpers.map(\.id).max() ?? -1) + 1, kind: kind, garden: -1, x: 0, y: 0)
+    func hireHelper(_ kind: HelperKind, in valley: Valley = .home) -> Helper? {
+        let price = helperPrice(in: valley)
+        guard jars.count >= price, canHireHelper else { return nil }
+        jars.removeFirst(price)
+        let helper = Helper(id: (helpers.map(\.id).max() ?? -1) + 1, kind: kind, garden: Helper.shed, x: 0, y: 0)
         helpers.append(helper)
         return helper
     }
@@ -282,25 +328,40 @@ final class World {
     }
 
     func moveHelper(_ id: Int, x: Int, y: Int) -> Bool {
-        guard let helper = helper(id), !helper.isStored, canPlaceHelper(x: x, y: y) else { return false }
+        guard let helper = helper(id), !helper.isStored, !helper.isHomeless, canPlaceHelper(x: x, y: y) else { return false }
         helper.settle(at: x, y)
         return true
     }
 
     func storeHelper(_ id: Int) {
-        guard let helper = helper(id) else { return }
-        helper.garden = -1
+        guard let helper = helper(id), !helper.isHomeless else { return }
+        helper.garden = Helper.shed
         helper.settle(at: 0, 0)
     }
 
-    func buyGarden(kind: GardenKind, plot: Int) -> Garden? {
-        let price = gardenPrice()
-        guard jars.count >= price, freePlots().contains(plot) else { return nil }
+    func buyGarden(kind: GardenKind, plot: Int, in valley: Valley = .home) -> Garden? {
+        let price = gardenPrice(in: valley)
+        guard jars.count >= price, isOpen(valley), freePlots(in: valley).contains(plot) else { return nil }
         jars.removeFirst(price)
-        let garden = Garden(id: nextGardenID, kind: kind, plot: plot, nextHornetIn: World.hornetMeanSeconds)
+        let garden = Garden(id: nextGardenID, kind: kind, valley: valley, plot: plot, nextHornetIn: World.hornetMeanSeconds)
         nextGardenID += 1
         gardens.append(garden)
+        if !hasColony { addSwarm(to: garden) }
         return garden
+    }
+
+    var hasColony: Bool { bees.contains { $0.role == .queen } || hives.contains { $0.queenEmergesIn != nil } }
+
+    private func addSwarm(to garden: Garden) {
+        let spot = Layout.startingHiveSpots[1], used = Set(hives.map(\.name))
+        let hive = Hive(id: nextHiveID, name: World.names.first { !used.contains($0) } ?? "Hive \(nextHiveID + 1)", garden: garden.id, x: spot.x, y: spot.y, honey: 0)
+        nextHiveID += 1
+        hives.append(hive)
+        reindex()
+        for position in 0..<World.colonyStrength / 2 {
+            bees.append(Bee(id: nextBeeID, hive: hive.id, role: World.defaultRole(position: position), state: .inside(wait: random.next() * 6), wobble: random.next() * 6.28))
+            nextBeeID += 1
+        }
     }
 
     func canPlace(x: Int, y: Int, in garden: Int, ignoring: Int? = nil) -> Bool {
@@ -374,6 +435,24 @@ final class World {
         }
     }
 
+    func buildFactory() -> Bool {
+        guard canBuildFactory else { return false }
+        jars.removeFirst(World.factoryPrice)
+        let absorbed = Set(gardens(in: .home).map(\.id))
+        let lostHives = Set(hives.filter { absorbed.contains($0.garden) }.map(\.id))
+        gardens.removeAll { absorbed.contains($0.id) }
+        hives.removeAll { lostHives.contains($0.id) }
+        bees.removeAll { lostHives.contains($0.hive) }
+        reindex()
+        let camp = World.campArea
+        for (i, helper) in helpers.enumerated() {
+            helper.garden = Helper.homeless
+            helper.settle(at: camp.minX + 6 + (i * 19) % (camp.maxX - camp.minX - 6), camp.minY + 4 + (i * 9) % (camp.maxY - camp.minY - 4))
+        }
+        hasFactory = true
+        return true
+    }
+
     func split(hive id: Int) -> Hive? {
         guard let source = hive(id), readyToSplit(source), let target = splitTarget(for: source) else { return nil }
         target.queenEmergesIn = World.queenSeconds
@@ -401,6 +480,7 @@ final class World {
         for hive in hives where !hive.isPacked { grow(hive, dt: dt, census: census[hive.id] ?? (0, false)) }
         finishPacking()
         for helper in helpers where !helper.isStored { step(helper, dt: dt, activity: activity) }
+        runFactory(seconds: dt, at: Date())
         if let visibleGarden, let garden = garden(visibleGarden) { updateHornet(garden, dt: dt, activity: activity, time: time) }
     }
 
@@ -551,6 +631,15 @@ final class World {
         }
     }
 
+    private func runFactory(seconds: Double, at date: Date) {
+        guard hasFactory else { return }
+        factoryHoney += World.factoryJarsPerMinute * seconds / 60
+        while factoryHoney >= 1 {
+            factoryHoney -= 1
+            jars.append(Jar.fromFactory(at: date))
+        }
+    }
+
     private func goToFullHive(_ helper: Helper) -> Bool {
         let full = hives(in: helper.garden).filter { $0.isFull && !$0.packing }
         guard let hive = full.min(by: { distance(helper, to: $0) < distance(helper, to: $1) }) else { return false }
@@ -561,7 +650,7 @@ final class World {
     private func potter(_ helper: Helper) {
         let roll = random.next()
         if roll < 0.55 {
-            let a = World.helperArea
+            let a = helper.isHomeless ? World.campArea : World.helperArea
             let x = min(Double(a.maxX), max(Double(a.minX), Double(helper.home.x) + (random.next() - 0.5) * 40))
             let y = min(Double(a.maxY), max(Double(a.minY), Double(helper.home.y) + (random.next() - 0.5) * 14))
             helper.task = .stroll(x: x, y: y)
@@ -737,6 +826,7 @@ final class World {
             for hive in hives where hive.isFull && !hive.isPacked {
                 if let helper = helper(in: hive.garden), helper.kind.isAwake(activity: activity) { collect(hive: hive.id, at: t) }
             }
+            runFactory(seconds: step, at: t)
             t = t.addingTimeInterval(step)
         }
         for hive in hives where !hive.isPacked {

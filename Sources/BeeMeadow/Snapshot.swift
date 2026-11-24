@@ -38,15 +38,41 @@ enum Snapshot {
                 canvas = book.canvas
             case "valley":
                 let valley = ValleyRenderer()
-                valley.render(world, minute: minute, time: 3, current: 0, hover: nil)
+                valley.render(world, valley: .home, minute: minute, time: 3, current: 0, hover: nil)
                 canvas = valley.canvas
             case "stall":
                 let stall = StallRenderer()
-                stall.renderStall(world, time: 1, dt: dt)
+                stall.renderStall(world, valley: .home, time: 1, dt: dt)
                 canvas = stall.canvas
+            case "factory-sign", "factory-confirm":
+                world.jars += (0..<1000).map { _ in Jar(honey: "Clover", hiveName: "Pip", collectedAt: Date()) }
+                let valley = ValleyRenderer()
+                valley.render(world, valley: .home, minute: minute, time: 3, current: 0, hover: nil, confirming: scene == "factory-confirm")
+                canvas = valley.canvas
+            case "region", "factory":
+                factoryWorld(world)
+                if scene == "region" {
+                    let region = RegionRenderer()
+                    region.render(world, minute: minute, time: 3, current: world.gardens.first?.valley, hover: (120, 40), back: true)
+                    canvas = region.canvas
+                } else {
+                    let factory = FactoryRenderer()
+                    for i in 0..<300 { world.tick(dt, minute: minute, time: Double(i) * dt, visibleGarden: nil) }
+                    factory.render(world, minute: minute, time: 10, hover: nil)
+                    canvas = factory.canvas
+                }
+            case let name where name.hasPrefix("demolition-"):
+                let age = Double(name.dropFirst(11)) ?? 1
+                world.jars += (0..<1000).map { _ in Jar(honey: "Clover", hiveName: "Pip", collectedAt: Date()) }
+                let valley = ValleyRenderer(), factory = FactoryRenderer()
+                valley.render(world, valley: .home, minute: minute, time: 3, current: 0, hover: nil)
+                factory.capture(valley.canvas)
+                _ = world.buildFactory()
+                factory.renderDemolition(world, age: age, minute: minute, time: 3 + age)
+                canvas = factory.canvas
             case "picker":
                 let stall = StallRenderer()
-                stall.renderPicker(world, time: 1, dt: dt, hover: (50, 60))
+                stall.renderPicker(world, valley: .home, time: 1, dt: dt, hover: (50, 60))
                 canvas = stall.canvas
             default:
                 world.hives[1].honey = 1
@@ -62,6 +88,16 @@ enum Snapshot {
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
         guard let scaled = ctx.makeImage() else { return }
         try? NSBitmapImageRep(cgImage: scaled).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+    }
+
+    private static func factoryWorld(_ world: World) {
+        world.jars += (0..<1100).map { _ in Jar(honey: "Clover", hiveName: "Pip", collectedAt: Date()) }
+        _ = world.hireHelper(.bear); _ = world.hireHelper(.mouse); _ = world.hireHelper(.hedgehog)
+        _ = world.buildFactory()
+        world.jars += (0..<2000).map { _ in Jar(honey: "Clover", hiveName: "Pip", collectedAt: Date()) }
+        for (i, valley) in World.valleys(inRing: 1).enumerated() where i % 3 != 2 {
+            for plot in [4, 0, 8].prefix(i % 3 + 1) { _ = world.buyGarden(kind: GardenKind.allCases[(i + plot) % 6], plot: plot, in: valley) }
+        }
     }
 
     private static func demoWorld() -> World {

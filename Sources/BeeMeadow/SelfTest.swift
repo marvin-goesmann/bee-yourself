@@ -142,6 +142,101 @@ enum SelfTest {
         let data = try? Persistence.encode(helped, currentGarden: 0, now: Date())
         let restored = data.map { Persistence.decode($0, now: Date()).world }
         check(restored?.helpers.count == 2 && restored?.helper(in: 0)?.kind == .bear && restored?.helper(in: 1)?.kind == .mouse, "helpers survive save and load")
+
+        func jars(_ n: Int) -> [Jar] { (0..<n).map { _ in Jar(honey: "Clover", hiveName: "Pip", collectedAt: Date()) } }
+        let factory = World.fresh()
+        factory.hornetsEnabled = false
+        factory.jars = jars(40)
+        let badger = factory.hireHelper(.badger)!
+        check(factory.placeHelper(badger.id, x: 70, y: 160, in: 0), "badger works the clover garden")
+        let mole = factory.hireHelper(.mouse)
+        factory.jars = jars(999)
+        check(factory.hireHelper(.hedgehog) == nil && !factory.canBuildFactory && !factory.buildFactory(), "factory needs 1000 jars")
+        factory.jars += jars(1)
+        let boxes = factory.spareBoxes
+        check(factory.buildFactory() && factory.hasFactory && factory.jars.isEmpty, "build the factory for 1000 jars")
+        check(factory.gardens.isEmpty && factory.hives.isEmpty && factory.bees.isEmpty, "factory swallows the valley's gardens, hives and bees")
+        check(factory.homelessHelpers.count == 2 && badger.isHomeless && mole?.isHomeless == true && factory.storedHelpers.isEmpty, "every helper becomes homeless")
+        check(factory.spareBoxes == boxes, "shed boxes are kept")
+        factory.storeHelper(badger.id)
+        check(badger.isHomeless && !factory.moveHelper(badger.id, x: 70, y: 160), "homeless helpers stay at the camp")
+        let east = Valley(x: 1, y: 0), outer = Valley(x: 2, y: 0)
+        check(factory.openRing == 1 && factory.isOpen(east) && !factory.isOpen(outer) && !factory.isOpen(.home), "eight valleys open around the factory")
+        check(World.valleys(inRing: 1).count == 8 && World.valleys(inRing: 2).count == 16, "rings of 8 then 16 valleys")
+        check(factory.gardenPrice(in: east) == 100 && factory.hiveBoxPrice(in: east) == 30 && factory.helperPrice(in: east) == 200, "first ring costs 10x")
+        factory.jars = jars(5000)
+        check(factory.buyGarden(kind: .heather, plot: 0, in: outer) == nil, "second ring stays shut")
+        for (i, valley) in World.valleys(inRing: 1).enumerated() {
+            check(factory.openRing == 1, "ring 2 still shut with \(i) of 8 valleys claimed")
+            _ = factory.buyGarden(kind: .heather, plot: 4, in: valley)
+        }
+        check(factory.gardens.count == 8 && factory.jars.count == 5000 - 800, "each first ring valley starts at 100 jars")
+        let swarm = factory.hives.first
+        check(factory.hives.count == 1 && swarm?.garden == factory.gardens[0].id && factory.hasColony, "a wild swarm moves into the first new garden")
+        check(swarm.map { factory.readyToSplit($0) } == true, "the swarm can split into new boxes")
+        check(factory.openRing == 2 && factory.isOpen(outer) && factory.gardenPrice(in: outer) == 1000, "filling the ring opens the next at 100x")
+        check(factory.canHireHelper && factory.hireHelper(.bear, in: outer) != nil && factory.jars.count == 4200 - 2000, "hire at 100x, homeless helpers don't count")
+        let beforeFactory = factory.jars.count
+        for i in 0..<600 { factory.tick(0.1, minute: 30, time: Double(i) * 0.1, visibleGarden: nil) }
+        let made = factory.jars.count - beforeFactory
+        check(made >= 2 && made <= 4, "factory makes about 3.5 jars a minute by day (\(made))")
+        let beforeNight = factory.jars.count
+        for i in 0..<600 { factory.tick(0.1, minute: 66, time: Double(i) * 0.1, visibleGarden: nil) }
+        check(Clock.activity(66) == 0 && (2...4).contains(factory.jars.count - beforeNight), "factory keeps going through the night (\(factory.jars.count - beforeNight))")
+        check(factory.jars.last?.honey == World.factoryHoneyName && factory.jars.last?.hiveName == "Factory", "factory jars are blended honey")
+        check(!factory.harvests.contains { $0.hiveName == "Factory" }, "factory jars stay out of the harvest book")
+        let beforeAway = factory.jars.count
+        factory.catchUp(from: Date().addingTimeInterval(-3600), to: Date())
+        check(factory.jars.count > beforeAway + 10, "factory keeps making honey while away (\(factory.jars.count - beforeAway))")
+        let saved = (try? Persistence.encode(factory, currentGarden: -1, now: Date())).map { Persistence.decode($0, now: Date()) }
+        check(saved?.world.hasFactory == true && saved?.world.openRing == 2 && saved?.world.homelessHelpers.count == 2, "factory, valleys and camp survive save and load")
+        let factoryJars = factory.jars.filter(\.isFromFactory).count
+        let encoded = (try? Persistence.encode(factory, currentGarden: -1, now: Date())).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        check(factoryJars > 100 && !encoded.contains("\"Blended\"") && saved?.world.jars.count == factory.jars.count, "factory jars save as a count (\(factoryJars) jars)")
+        check(saved?.world.garden(in: east, plot: 4) != nil && saved?.currentGarden == saved?.world.gardens.first?.id, "gardens remember their valley")
+
+        let meadow = World.classic()
+        let hive = meadow.hives[0]
+        meadow.bees = (0..<World.colonyStrength).map { i in
+            Bee(id: i, hive: hive.id, role: i == 0 ? .queen : i <= World.fullStrengthForagers ? .forager : .house)
+        }
+        hive.honey = 0
+        meadow.catchUp(from: Date().addingTimeInterval(-600), to: Date())
+        let valleyRate = hive.honey / 10 * Double(World.fullValleyHives)
+        check(abs(World.factoryJarsPerMinute - 2 * valleyRate) < 0.01, "factory makes twice a full valley (\(World.factoryJarsPerMinute) vs \(valleyRate) jars a minute)")
+
+        let played = World.fresh()
+        played.hornetsEnabled = false
+        played.jars = jars(1150)
+        let game = Game(world: played, currentGarden: 0)
+        func tap(_ r: PixelRect) { game.click((Double(r.x) + Double(r.w) / 2, Double(r.y) + Double(r.h) / 2)) }
+        tap(Widgets.mapRect)
+        tap(ValleyRenderer.factoryRect)
+        tap(ValleyRenderer.cancelRect)
+        check(game.scene == .valley(.home) && !played.hasFactory, "factory sign asks before building")
+        tap(ValleyRenderer.factoryRect)
+        tap(ValleyRenderer.buildRect)
+        check(played.hasFactory && !game.isInteractive((120, 90)), "building starts the demolition")
+        for i in 0..<Int(FactoryRenderer.duration * 30) + 2 { _ = game.step(dt: 1.0 / 30, minute: 30, time: Double(i) / 30) }
+        check(game.scene == .region, "demolition ends on the map")
+        tap(RegionRenderer.tileRect(Valley(x: 0, y: -2), world: played))
+        check(game.scene == .region, "locked valleys can't be visited")
+        tap(RegionRenderer.tileRect(.home, world: played))
+        check(game.scene == .factory && game.step(dt: 0.1, minute: 30, time: 10) != nil, "visit the factory")
+        tap(Widgets.backRect)
+        tap(RegionRenderer.tileRect(Valley(x: 1, y: 0), world: played))
+        tap(ValleyRenderer.plotRect(4))
+        check(game.scene == .picker(Valley(x: 1, y: 0), 4), "pick a plot in a new valley")
+        tap(StallRenderer.pickerRect(2))
+        check(game.scene == .garden && played.garden(game.currentGarden)?.valley == Valley(x: 1, y: 0) && played.jars.count == 50, "buy a garden there for 100 jars")
+        tap(Widgets.mapRect)
+        tap(ValleyRenderer.stallRect)
+        tap(StallRenderer.tradeRect)
+        check(played.spareBoxes == 2 && played.jars.count == 20, "hive boxes cost 30 jars out here")
+        game.escape(); game.escape()
+        check(game.scene == .region, "valleys sit under the map")
+        game.escape()
+        check(game.scene == .garden, "map goes back to the garden")
         return ok
     }
 }

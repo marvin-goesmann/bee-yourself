@@ -41,7 +41,8 @@ struct HoneyColour {
     let deep: RGB
 
     static func of(_ honey: String) -> HoneyColour {
-        switch GardenKind.forHoney(honey) ?? .clover {
+        if honey == World.factoryHoneyName { return HoneyColour(body: RGB("#dc9a30"), hi: RGB("#f6c868"), deep: RGB("#b07420")) }
+        return switch GardenKind.forHoney(honey) ?? .clover {
         case .clover: HoneyColour(body: RGB("#f0b93a"), hi: RGB("#ffdd7a"), deep: RGB("#d89a22"))
         case .heather: HoneyColour(body: RGB("#d9801c"), hi: RGB("#f2a548"), deep: RGB("#b4600f"))
         case .bramble: HoneyColour(body: RGB("#9a4a14"), hi: RGB("#c26d2a"), deep: RGB("#73330a"))
@@ -112,17 +113,28 @@ struct Flower {
     }
 }
 
+struct Valley: Hashable {
+    let x: Int
+    let y: Int
+
+    static let home = Valley(x: 0, y: 0)
+
+    var ring: Int { max(abs(x), abs(y)) }
+}
+
 final class Garden {
     let id: Int
     let kind: GardenKind
+    let valley: Valley
     let plot: Int
     let flowers: [Flower]
     var hornet: Hornet?
     var nextHornetIn: Double
 
-    init(id: Int, kind: GardenKind, plot: Int, nextHornetIn: Double) {
+    init(id: Int, kind: GardenKind, valley: Valley = .home, plot: Int, nextHornetIn: Double) {
         self.id = id
         self.kind = kind
+        self.valley = valley
         self.plot = plot
         self.nextHornetIn = nextHornetIn
         flowers = Flower.bed(for: kind, seed: 4242 + id * 131)
@@ -166,6 +178,10 @@ struct Jar: Codable {
         self.hiveName = hiveName
         self.collectedAt = collectedAt
     }
+
+    static func fromFactory(at date: Date) -> Jar { Jar(honey: World.factoryHoneyName, hiveName: World.factoryName, collectedAt: date) }
+
+    var isFromFactory: Bool { honey == World.factoryHoneyName && hiveName == World.factoryName }
 
     private enum CodingKeys: String, CodingKey { case honey, hiveName, collectedAt, hive }
 

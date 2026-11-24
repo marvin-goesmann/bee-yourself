@@ -13,10 +13,12 @@ final class Game {
         case hive(Int)
         case pantry
         case book
-        case valley
+        case valley(Valley)
         case stall
-        case picker(Int)
+        case picker(Valley, Int)
         case helpers
+        case region
+        case factory
     }
 
     private enum Item: Equatable { case hive(Int), helper(Int) }
@@ -42,6 +44,8 @@ final class Game {
     private let book = BookRenderer()
     private let valley = ValleyRenderer()
     private let stall = StallRenderer()
+    private let region = RegionRenderer()
+    private let factory = FactoryRenderer()
     private var time = 0.0
     var mouse: (x: Double, y: Double)?
     private enum Placing: Equatable { case emptyBox, hive(Int), helper(Int) }
@@ -50,6 +54,9 @@ final class Game {
     private var note: (lines: [String], age: Double)?
     private var shedOpen = false
     private var stallReturnsToGarden = false
+    private var stallValley = Valley.home
+    private var confirmingFactory = false
+    private var demolition: Double?
     private var sleep: (age: Double, slept: Bool)?
     private static let sleepFadeIn = 1.2, sleepHold = 2.2, sleepFadeOut = 4.2
     private var canSleep: Bool { sleep == nil && Clock.canSleep(Clock.minute(at: Date())) }
@@ -80,6 +87,7 @@ final class Game {
     init(world: World, currentGarden: Int) {
         self.world = world
         self.currentGarden = currentGarden
+        if world.garden(currentGarden) == nil && world.hasFactory { scene = .region }
     }
 
     private var garden: Garden? { world.garden(currentGarden) }
@@ -88,7 +96,7 @@ final class Game {
 
     @discardableResult
     func click(_ p: (x: Double, y: Double)) -> Bool {
-        guard sleep == nil else { return true }
+        guard sleep == nil, demolition == nil else { return true }
         switch scene {
         case .garden:
             if shedOpen {
@@ -100,13 +108,13 @@ final class Game {
                 case .emptyBox: placing = .emptyBox
                 case .hive(let id): placing = .hive(id)
                 case .helper(let id): placing = .helper(id)
-                case .stall: stallReturnsToGarden = true; go(to: .stall)
+                case .stall: stallReturnsToGarden = true; stallValley = garden?.valley ?? .home; go(to: .stall)
                 case .close: break
                 }
                 return true
             }
             if placing != nil { place(at: p); return true }
-            if Widgets.contains(Widgets.mapRect, p) { go(to: .valley); return true }
+            if Widgets.contains(Widgets.mapRect, p), let garden { go(to: .valley(garden.valley)); return true }
             if Widgets.contains(Widgets.pantryRect, p) { go(to: .pantry); return true }
             if Widgets.contains(Widgets.shedRect, p) { shedOpen = true; return true }
             if canSleep && Widgets.contains(Widgets.bedRect, p) { sleep = (0, false); return true }
@@ -139,45 +147,73 @@ final class Game {
             if Widgets.contains(PantryRenderer.bookRect, p) { go(to: .book); return true }
         case .book:
             if Widgets.contains(Widgets.backRect, p) { go(to: .pantry); return true }
-        case .valley:
-            if Widgets.contains(Widgets.backRect, p) { go(to: .garden); return true }
-            if Widgets.contains(ValleyRenderer.stallRect, p) { go(to: .stall); return true }
+        case .valley(let valley):
+            if confirmingFactory {
+                if Widgets.contains(ValleyRenderer.buildRect, p) { buildFactory() }
+                else if Widgets.contains(ValleyRenderer.cancelRect, p) || !Widgets.contains(ValleyRenderer.confirmPanel, p) { confirmingFactory = false }
+                return true
+            }
+            if Widgets.contains(Widgets.backRect, p) { go(to: world.hasFactory ? .region : .garden); return true }
+            if Widgets.contains(ValleyRenderer.stallRect, p) { stallValley = valley; go(to: .stall); return true }
+            if valley == .home && world.canBuildFactory && Widgets.contains(ValleyRenderer.factoryRect, p) { confirmingFactory = true; return true }
             if let plot = ValleyRenderer.plot(at: p) {
-                if let owned = world.gardens.first(where: { $0.plot == plot }) { currentGarden = owned.id; go(to: .garden) }
-                else { go(to: .picker(plot)) }
+                if let owned = world.garden(in: valley, plot: plot) { currentGarden = owned.id; go(to: .garden) }
+                else { go(to: .picker(valley, plot)) }
                 return true
             }
         case .stall:
-            if Widgets.contains(Widgets.backRect, p) { go(to: stallReturnsToGarden ? .garden : .valley); return true }
+            if Widgets.contains(Widgets.backRect, p) { go(to: stallReturnsToGarden ? .garden : .valley(stallValley)); return true }
             if Widgets.contains(StallRenderer.tradeRect, p) {
-                if world.buyHiveBox() { stall.show("+1 hive box in your shed"); onChange?() }
-                else { stall.show("need \(World.hiveBoxPrice) jars") }
+                if world.buyHiveBox(in: stallValley) { stall.show("+1 hive box in your shed"); onChange?() }
+                else { stall.show("need \(world.hiveBoxPrice(in: stallValley)) jars") }
                 return true
             }
             if Widgets.contains(StallRenderer.hireRect, p), world.canHireHelper { go(to: .helpers); return true }
-            if Widgets.contains(StallRenderer.valleyRect, p) { go(to: .valley); return true }
+            if Widgets.contains(StallRenderer.valleyRect, p) { go(to: .valley(stallValley)); return true }
         case .helpers:
             if Widgets.contains(Widgets.backRect, p) { go(to: .stall); return true }
             for (i, kind) in HelperKind.allCases.enumerated() where Widgets.contains(StallRenderer.helperRect(i), p) {
-                if world.hireHelper(kind) != nil {
+                if world.hireHelper(kind, in: stallValley) != nil {
                     go(to: .stall)
                     stall.show("\(kind.title) is in your shed")
                     onChange?()
-                } else { stall.show("need \(World.helperPrice) jars") }
+                } else { stall.show("need \(world.helperPrice(in: stallValley)) jars") }
                 return true
             }
-        case .picker(let plot):
-            if Widgets.contains(Widgets.backRect, p) { go(to: .valley); return true }
+        case .picker(let valley, let plot):
+            if Widgets.contains(Widgets.backRect, p) { go(to: .valley(valley)); return true }
             for (i, kind) in GardenKind.allCases.enumerated() where Widgets.contains(StallRenderer.pickerRect(i), p) {
-                if let garden = world.buyGarden(kind: kind, plot: plot) {
+                let hadColony = world.hasColony
+                if let garden = world.buyGarden(kind: kind, plot: plot, in: valley) {
                     currentGarden = garden.id
                     go(to: .garden)
+                    if !hadColony { show(["A wild swarm", "has moved in"]) }
                     onChange?()
-                } else { stall.show("need \(world.gardenPrice()) jars") }
+                } else { stall.show("need \(world.gardenPrice(in: valley)) jars") }
                 return true
             }
+        case .region:
+            if garden != nil && Widgets.contains(Widgets.backRect, p) { go(to: .garden); return true }
+            if let valley = RegionRenderer.valley(at: p, world: world) {
+                if valley == .home { go(to: .factory) }
+                else if world.isOpen(valley) { go(to: .valley(valley)) }
+                else { show(["Not yet", "put a garden in every", "valley of the ring inside"]) }
+                return true
+            }
+        case .factory:
+            if Widgets.contains(Widgets.backRect, p) { go(to: .region); return true }
+            if let helper = homelessHelperAt(p) { helper.pet(); return true }
         }
         return false
+    }
+
+    private func buildFactory() {
+        confirmingFactory = false
+        valley.render(world, valley: .home, minute: Clock.minute(at: Date()), time: time, current: currentGarden, hover: nil)
+        factory.capture(valley.canvas)
+        guard world.buildFactory() else { return }
+        demolition = 0
+        onChange?()
     }
 
     func dragged(to p: (x: Double, y: Double)) {
@@ -220,15 +256,20 @@ final class Game {
     }
 
     func escape() {
+        guard demolition == nil else { return }
         if placing != nil { placing = nil; return }
         if shedOpen { shedOpen = false; return }
+        if confirmingFactory { confirmingFactory = false; return }
         switch scene {
         case .garden: break
-        case .hive, .pantry, .valley: go(to: .garden)
+        case .hive, .pantry: go(to: .garden)
+        case .valley: go(to: world.hasFactory ? .region : .garden)
         case .book: go(to: .pantry)
-        case .stall: go(to: stallReturnsToGarden ? .garden : .valley)
-        case .picker: go(to: .valley)
+        case .stall: go(to: stallReturnsToGarden ? .garden : .valley(stallValley))
+        case .picker(let valley, _): go(to: .valley(valley))
         case .helpers: go(to: .stall)
+        case .region: if garden != nil { go(to: .garden) }
+        case .factory: go(to: .region)
         }
     }
 
@@ -242,7 +283,8 @@ final class Game {
         placing = nil
         drag = nil
         shedOpen = false
-        if next == .valley { stallReturnsToGarden = false }
+        confirmingFactory = false
+        if case .valley = next { stallReturnsToGarden = false }
         scene = next
     }
 
@@ -276,6 +318,7 @@ final class Game {
     private func show(_ lines: [String]) { note = (lines, 0) }
 
     func isInteractive(_ p: (x: Double, y: Double)) -> Bool {
+        guard demolition == nil else { return false }
         switch scene {
         case .garden:
             if shedOpen { return shedLayout().rows.contains { $0.enabled && Widgets.contains($0.rect, p) } }
@@ -287,12 +330,23 @@ final class Game {
                 || (Widgets.contains(HiveRenderer.splitRect, p) && world.readyToSplit(hive) && world.splitTarget(for: hive) != nil)
         case .pantry: return Widgets.contains(Widgets.backRect, p) || Widgets.contains(PantryRenderer.bookRect, p)
         case .book: return Widgets.contains(Widgets.backRect, p)
-        case .valley: return Widgets.contains(Widgets.backRect, p) || Widgets.contains(ValleyRenderer.stallRect, p) || ValleyRenderer.plot(at: p) != nil
+        case .valley(let valley):
+            if confirmingFactory { return Widgets.contains(ValleyRenderer.buildRect, p) || Widgets.contains(ValleyRenderer.cancelRect, p) }
+            return Widgets.contains(Widgets.backRect, p) || Widgets.contains(ValleyRenderer.stallRect, p) || ValleyRenderer.plot(at: p) != nil
+                || (valley == .home && world.canBuildFactory && Widgets.contains(ValleyRenderer.factoryRect, p))
         case .stall: return [Widgets.backRect, StallRenderer.tradeRect, StallRenderer.valleyRect].contains { Widgets.contains($0, p) }
             || (world.canHireHelper && Widgets.contains(StallRenderer.hireRect, p))
         case .helpers: return Widgets.contains(Widgets.backRect, p) || (0..<HelperKind.allCases.count).contains { Widgets.contains(StallRenderer.helperRect($0), p) }
         case .picker: return Widgets.contains(Widgets.backRect, p) || (0..<GardenKind.allCases.count).contains { Widgets.contains(StallRenderer.pickerRect($0), p) }
+        case .region:
+            if garden != nil && Widgets.contains(Widgets.backRect, p) { return true }
+            return RegionRenderer.valley(at: p, world: world).map { $0 == .home || world.isOpen($0) } ?? false
+        case .factory: return Widgets.contains(Widgets.backRect, p) || homelessHelperAt(p) != nil
         }
+    }
+
+    private func homelessHelperAt(_ p: (x: Double, y: Double)) -> Helper? {
+        world.homelessHelpers.first { abs(p.x - $0.x) <= 6 && p.y >= $0.y - 14 && p.y <= $0.y + 1 }
     }
 
     private func helperAt(_ p: (x: Double, y: Double)) -> Helper? {
@@ -311,7 +365,19 @@ final class Game {
     func step(dt: Double, minute: Double, time: Double) -> PixelCanvas? {
         self.time = time
         advance(by: dt, visible: true, minute: minute)
+        if scene == .garden && garden == nil && world.hasFactory { scene = .region }
         Widgets.backHovered = scene != .garden && (mouse.map { Widgets.contains(Widgets.backRect, $0) } ?? false)
+        if let age = demolition {
+            Widgets.backHovered = false
+            if age + dt < FactoryRenderer.duration {
+                demolition = age + dt
+                factory.renderDemolition(world, age: age + dt, minute: minute, time: time)
+                return factory.canvas
+            }
+            demolition = nil
+            go(to: .region)
+            show(["The factory is humming", "eight new valleys await"])
+        }
         let canvas: PixelCanvas
         switch scene {
         case .garden:
@@ -357,18 +423,24 @@ final class Game {
         case .book:
             book.render(world)
             canvas = book.canvas
-        case .valley:
-            valley.render(world, minute: minute, time: time, current: currentGarden, hover: mouse)
+        case .valley(let v):
+            valley.render(world, valley: v, minute: minute, time: time, current: currentGarden, hover: mouse, confirming: confirmingFactory)
             canvas = valley.canvas
         case .stall:
-            stall.renderStall(world, time: time, dt: dt)
+            stall.renderStall(world, valley: stallValley, time: time, dt: dt)
             canvas = stall.canvas
-        case .picker:
-            stall.renderPicker(world, time: time, dt: dt, hover: mouse)
+        case .picker(let v, _):
+            stall.renderPicker(world, valley: v, time: time, dt: dt, hover: mouse)
             canvas = stall.canvas
         case .helpers:
-            stall.renderHelpers(world, time: time, dt: dt, hover: mouse)
+            stall.renderHelpers(world, valley: stallValley, time: time, dt: dt, hover: mouse)
             canvas = stall.canvas
+        case .region:
+            region.render(world, minute: minute, time: time, current: garden?.valley, hover: mouse, back: garden != nil)
+            canvas = region.canvas
+        case .factory:
+            factory.render(world, minute: minute, time: time, hover: mouse)
+            canvas = factory.canvas
         }
         if var n = note {
             n.age += dt

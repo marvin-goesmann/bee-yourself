@@ -94,6 +94,25 @@ final class PixelCanvas {
         pixels.update(from: other.pixels, count: width * height * 4)
     }
 
+    func blit(from source: PixelCanvas, x sx: Int, y sy: Int, w: Int, h: Int, to dx: Int, _ dy: Int) {
+        for row in 0..<h {
+            let ty = dy + row, fy = sy + row
+            guard ty >= 0, ty < height, fy >= 0, fy < source.height else { continue }
+            let x0 = max(0, -dx, -sx), x1 = min(w, width - dx, source.width - sx)
+            guard x0 < x1 else { continue }
+            (pixels + (ty * width + dx + x0) * 4).update(from: source.pixels + (fy * source.width + sx + x0) * 4, count: (x1 - x0) * 4)
+        }
+    }
+
+    func disc(_ cx: Double, _ cy: Double, radius: Double, _ colour: RGB, alpha: Double = 1) {
+        let r = Int(radius.rounded(.up))
+        for dy in -r...r {
+            guard Double(dy * dy) <= radius * radius else { continue }
+            let span = Int((radius * radius - Double(dy * dy)).squareRoot().rounded())
+            fill(cx - Double(span), cy + Double(dy), span * 2 + 1, 1, colour, alpha: alpha)
+        }
+    }
+
 }
 
 #if canImport(CoreGraphics)

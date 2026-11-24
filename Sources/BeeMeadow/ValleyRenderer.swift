@@ -33,6 +33,10 @@ extension GardenKind {
 
 final class ValleyRenderer {
     static let stallRect: PixelRect = (6, 66, 48, 50)
+    static let factoryRect: PixelRect = (6, 150, 48, 13)
+    static let confirmPanel: PixelRect = (30, 48, 180, 84)
+    static let buildRect: PixelRect = (confirmPanel.x + 16, confirmPanel.y + confirmPanel.h - 22, 64, 13)
+    static let cancelRect: PixelRect = (confirmPanel.x + confirmPanel.w - 80, confirmPanel.y + confirmPanel.h - 22, 64, 13)
 
     static func plotRect(_ plot: Int) -> PixelRect {
         (62 + (plot % 3) * 60, 28 + (plot / 3) * 50, 52, 36)
@@ -56,7 +60,7 @@ final class ValleyRenderer {
         specks = (0..<260).map { _ in (r.int(Layout.width), 19 + r.int(Layout.height - 19), r.next() < 0.6) }
     }
 
-    func render(_ world: World, minute: Double, time: Double, current: Int, hover: (x: Double, y: Double)?) {
+    func render(_ world: World, valley: Valley, minute: Double, time: Double, current: Int, hover: (x: Double, y: Double)?, confirming: Bool = false) {
         let c = canvas
         c.tint = Clock.light(at: minute).tint.mixed(with: .white, 0.35)
         c.fill(0, 19, Layout.width, Layout.height - 19, C.grass)
@@ -72,18 +76,38 @@ final class ValleyRenderer {
         c.fill(30, 91, 32, 3, C.path)
 
         drawStall(time: time)
-        let hoveredPlot = hover.flatMap(ValleyRenderer.plot(at:))
+        let hoveredPlot = confirming ? nil : hover.flatMap(ValleyRenderer.plot(at:))
         for plot in 0..<Layout.plots {
             let r = ValleyRenderer.plotRect(plot)
-            if let garden = world.gardens.first(where: { $0.plot == plot }) {
+            if let garden = world.garden(in: valley, plot: plot) {
                 drawGarden(garden, world: world, r: r, time: time)
                 if garden.id == current || hoveredPlot == plot { outline(r, C.highlight) }
             } else {
-                drawEmptyPlot(r, price: world.gardenPrice(), hovered: hoveredPlot == plot)
+                drawEmptyPlot(r, price: world.gardenPrice(in: valley), hovered: hoveredPlot == plot)
             }
         }
+        if valley == .home && world.canBuildFactory {
+            FactoryArt.tiny(c, x: ValleyRenderer.factoryRect.x + 19, y: ValleyRenderer.factoryRect.y - 14)
+            c.tint = .white
+            Widgets.button(c, ValleyRenderer.factoryRect, label: "Factory", enabled: true, pulse: 0.5 + 0.5 * sin(time * 3))
+        }
         c.tint = .white
-        Widgets.header(c, title: "Valley", detail: world.jars.count == 1 ? "1 jar" : "\(world.jars.count) jars")
+        let title = valley == .home ? "Valley" : "Valley x\(world.priceMultiplier(in: valley))"
+        Widgets.header(c, title: title, detail: world.jars.count == 1 ? "1 jar" : "\(world.jars.count) jars")
+        if confirming { drawConfirm() }
+    }
+
+    private func drawConfirm() {
+        let c = canvas, r = ValleyRenderer.confirmPanel
+        c.fill(0, 0, Layout.width, Layout.height, RGB("#1c1108"), alpha: 0.4)
+        c.fill(Double(r.x + 2), Double(r.y + 2), r.w, r.h, RGB("#1c1108"), alpha: 0.3)
+        c.fill(Double(r.x - 1), Double(r.y - 1), r.w + 2, r.h + 2, Widgets.C.outline)
+        c.fill(Double(r.x), Double(r.y), r.w, r.h, Widgets.C.paper)
+        PixelFont.draw("Build the factory?", on: c, x: r.x + 10, y: r.y + 9, colour: Widgets.C.buttonText)
+        let lines = ["It costs \(World.factoryPrice) jars and swallows", "every garden, hive and bee here.", "Your helpers will lose their homes.", "Eight new valleys open around it."]
+        for (i, line) in lines.enumerated() { PixelFont.draw(line, on: c, x: r.x + 10, y: r.y + 21 + i * 8, colour: Widgets.C.ink) }
+        Widgets.button(c, ValleyRenderer.buildRect, label: "Build it", enabled: true)
+        Widgets.button(c, ValleyRenderer.cancelRect, label: "Not yet", enabled: true)
     }
 
     private func outline(_ r: PixelRect, _ colour: RGB) {

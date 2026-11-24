@@ -44,7 +44,11 @@ final class Helper {
     var walked = 0.0
     var heart = 0.0
 
-    var isStored: Bool { garden < 0 }
+    static let shed = -1
+    static let homeless = -2
+
+    var isStored: Bool { garden == Helper.shed }
+    var isHomeless: Bool { garden == Helper.homeless }
 
     var isWalking: Bool {
         switch task {
@@ -272,5 +276,42 @@ enum HelperSprite {
         }
         if sitting { stamp(zee, spec.z.0, spec.z.1 + (frame % 2 == 0 ? 1 : 0)) }
         return grid
+    }
+}
+
+extension HelperSprite {
+    private static func pose(_ h: Helper, time: Double) -> (pose: HelperSprite.Pose, frame: Int) {
+        if h.isWalking { return (h.carrying ? .carry : .walk, Int(h.walked * 8)) }
+        if h.asleep || h.isNapping { return (.sleep, Int(time * 1.2)) }
+        let blink = (time + Double(h.id) * 1.7).truncatingRemainder(dividingBy: 3.6) < 0.15
+        return (blink ? .blink : .idle, 0)
+    }
+
+    static func drawInScene(_ h: Helper, on canvas: PixelCanvas, time: Double, dark: Double) {
+        let (pose, frame) = pose(h, time: time)
+        let x = Int(h.x.rounded()), y = Int(h.y.rounded())
+        canvas.fill(Double(x - 5), Double(y + 1), 10, 1, RGB("#000000"), alpha: 0.18)
+        draw(h.kind, on: canvas, x: x - 8, y: y - 15, pose: pose, frame: frame, flip: h.facing < 0, lantern: h.kind == .mouse && dark > 0.3)
+    }
+
+    static func drawGlow(_ h: Helper, on canvas: PixelCanvas, time: Double, dark: Double) {
+        guard h.kind == .mouse, dark > 0.3 else { return }
+        let (pose, frame) = pose(h, time: time)
+        guard let p = HelperSprite.lanternPoint(h.kind, pose: pose, frame: frame) else { return }
+        let lx = Double(h.facing < 0 ? Int(h.x.rounded()) - 8 + 15 - p.x : Int(h.x.rounded()) - 8 + p.x), ly = Double(Int(h.y.rounded()) - 15 + p.y)
+        let k = dark * (0.9 + 0.1 * sin(time * 6))
+        for y in -9...9 { for x in -9...9 where x * x + y * y <= 81 { canvas.fill(lx + Double(x), ly + Double(y), 1, 1, RGB("#ffd68c"), alpha: 0.08 * k) } }
+    }
+
+    static func drawHeart(_ h: Helper, on canvas: PixelCanvas) {
+        guard h.heart > 0 else { return }
+        let rows = [".rr.rr.", "rwrrrrr", "rrrrrrr", ".rrrrr.", "..rrr..", "...r..."]
+        let rise = (1.2 - h.heart) * 8, alpha = min(1, h.heart / 0.4)
+        let ox = Int(h.x.rounded()) - 3, oy = Int((h.y - 24 - rise).rounded())
+        for (j, row) in rows.enumerated() {
+            for (i, ch) in row.enumerated() where ch != "." {
+                canvas.fill(Double(ox + i), Double(oy + j), 1, 1, ch == "w" ? RGB("#ffb3bd") : RGB("#e0485a"), alpha: alpha)
+            }
+        }
     }
 }
